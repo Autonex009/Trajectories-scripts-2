@@ -1,0 +1,553 @@
+"""Ticketmaster info gathering verifier for event ticket searches.
+
+This module provides functionality to verify AI agent ticket search results on Ticketmaster
+by gathering event information through JavaScript scraping and matching against expected queries.
+"""
+
+import functools
+import itertools
+import random
+import re
+import asyncio
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Literal
+
+from loguru import logger
+from playwright.async_api import Page
+from pydantic import BaseModel
+from typing_extensions import TypedDict
+
+from navi_bench.base import BaseMetric, BaseTaskConfig, UserMetadata, get_import_path
+from navi_bench.dates import initialize_user_metadata
+
+
+class SingleCandidateQuery(TypedDict, total=False):
+    """Single event query with specific criteria."""
+    event_name: str | None
+    event_category: str | None
+    date: str | None
+    time: str | None
+    venue: str | None
+    city: str | None
+    
+    min_tickets: int | None
+    max_price: float | None
+    min_price: float | None
+    section: str | None
+    row: str | None
+    
+    ticket_type: str | None
+    require_available: bool | None
+
+
+class MultiCandidateQuery(TypedDict, total=False):
+    """Multi-option event query allowing alternatives."""
+    event_names: list[str] | None
+    event_categories: list[str] | None
+    dates: list[str] | None
+    times: list[str] | None
+    venues: list[str] | None
+    cities: list[str] | None
+    
+    min_tickets: int | None
+    max_tickets: int | None
+    ticket_quantities: list[int] | None
+    max_price: float | None
+    min_price: float | None
+    currency: str | None
+    sections: list[str] | None
+    rows: list[str] | None
+    
+    ticket_types: list[str] | None
+    require_resale: bool | None  # Ticketmaster specific
+    exclude_resale: bool | None  # Ticketmaster specific
+    
+    require_available: bool | None
+    require_page_type: str | list[str] | None
+    availability_statuses: list[str] | None
+
+
+class InputDict(TypedDict, total=False):
+    """Input for update method."""
+    page: Page
+
+
+class InfoDict(TypedDict, total=False):
+    """Scraped event information from JavaScript - Ticketmaster specific."""
+    url: str
+    source: str
+    eventName: str
+    eventCategory: str
+    
+    date: str
+    time: str
+    venue: str
+    city: str
+    
+    section: str
+    row: str
+    seat: str
+    
+    price: float
+    currency: str
+    ticketCount: int
+    
+    isResale: bool
+    obstructedView: bool
+    
+    availabilityStatus: str
+    info: str
+    
+    pageType: str
+    antiBotStatus: str
+    globalStatus: str
+
+    # New Filter Fields
+    filterQuantity: int
+    filterMinPrice: float
+    filterMaxPrice: float
+
+    filterTicketTypes: list[str]  # NEW
+    filterADA: bool               # NEW
+
+    # New Discovery Filters
+    filterLocation: str
+    filterDateRange: str
+    filterGameType: str
+
+
+class FinalResult(BaseModel):
+    """Final verification result."""
+    score: float
+    n_queries: int
+    n_covered: int
+    queries: list[list[MultiCandidateQuery]]
+    is_query_covered: list[bool]
+
+
+class TicketmasterInfoGathering(BaseMetric):
+    """Gather event ticket information from Ticketmaster to evaluate query coverage."""
+
+    def __init__(self, queries: list[list[MultiCandidateQuery]]) -> None:
+        super().__init__()
+        self.queries = queries
+        self._all_infos: list[list[InfoDict]] = []
+        self._is_query_covered: list[bool] = [False] * len(queries)
+        self._unavailable_evidences: list[list[list[InfoDict]]] = [
+            [[] for _ in alternative_conditions] for alternative_conditions in queries
+        ]
+        self._navigation_stack: list[dict] = [] 
+        self._tracked_pages: set = set()
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(queries={self.queries})"
+
+    @functools.cached_property
+    def js_script(self) -> str:
+        """Load the JavaScript scraper."""
+        with open(Path(__file__).parent / "ticket_info_gathering.js", "r") as f:
+            return f.read()
+
+    async def reset(self) -> None:
+        self._all_infos = []
+        self._is_query_covered = [False] * len(self.queries)
+        self._unavailable_evidences = [[[] for _ in alternative_conditions] for alternative_conditions in self.queries]
+        self._navigation_stack = []
+        self._tracked_pages = set()
+    
+    def attach_to_context(self, context) -> None:
+        """Attach automatic navigation tracking to a browser context."""
+        
+        async def track_page(page) -> None:
+            page_id = id(page)
+            if page_id in self._tracked_pages:
+                return
+            self._tracked_pages.add(page_id)
+            
+            async def on_frame_navigated(frame):
+                if frame != page.main_frame:
+                    return
+                try:
+                    logger.info(f"[NAV] TM: {page.url[:80]}...")
+                    await self.update(page=page)
+                except Exception as e:
+                    logger.warning(f"Update failed: {e}")
+            
+            page.on("framenavigated", lambda f: asyncio.create_task(on_frame_navigated(f)))
+            logger.info(f"Tracking attached to TM page: {page.url[:60]}...")
+        
+        for page in context.pages:
+            asyncio.create_task(track_page(page))
+        
+        context.on("page", lambda p: asyncio.create_task(track_page(p)))
+
+    async def update(self, **kwargs) -> None:
+        """Update with new page information, accommodating Ticketmaster's DOM."""
+        inputs: InputDict = kwargs
+        page = inputs["page"]
+        url = page.url
+        
+        # 1. Check for Anti-Bot / Queue immediately to avoid useless timeouts
+        content = await page.content()
+        if "queue-it.net" in url or "You are now in line" in content:
+            logger.warning("Agent is currently in a Ticketmaster Queue.")
+        elif "Pardon the Interruption" in content or "sec-text-container" in content:
+            logger.error("Agent has been blocked by Ticketmaster PerimeterX/DataDome.")
+
+        # 2. Wait for TM specific elements (Non-blocking)
+        if "/event/" in url:
+            try:
+                await page.wait_for_selector(
+                    'li[data-price], #list-view li, [data-bdd*="list-item"]',
+                    state="attached",
+                    timeout=10000
+                )
+                await page.wait_for_timeout(1000) # Hydration buffer
+            except Exception:
+                pass # Fail silently, we will scrape frames anyway
+
+        # 3. RUN JS SCRAPER ACROSS ALL FRAMES
+        all_frame_infos: list[InfoDict] = []
+        for frame in page.frames:
+            try:
+                frame_infos = await frame.evaluate(self.js_script)
+                if frame_infos and isinstance(frame_infos, list):
+                    all_frame_infos.extend(frame_infos)
+            except Exception:
+                pass # Ignore cross-origin frame access errors
+        
+        # Deduplicate results across frames
+        unique_infos = []
+        seen_keys = set()
+        for info in all_frame_infos:
+            # Create a unique signature for each ticket to prevent double-counting
+            key = (
+                f"{info.get('eventName')}-{info.get('date')}-{info.get('section')}-"
+                f"{info.get('row')}-{info.get('seat')}-{info.get('listingId')}-"
+                f"{info.get('price')}-{info.get('source')}"
+            )
+            if key not in seen_keys:
+                seen_keys.add(key)
+                unique_infos.append(info)
+        
+        infos = unique_infos
+
+        # =====================================================================
+        # DEBUG: SCRAPING STAGE BREAKDOWN
+        # =====================================================================
+        logger.info("▼▼▼ SCRAPING STAGE BREAKDOWN ▼▼▼")
+        if not infos:
+            logger.warning("No data scraped at all from this page!")
+        else:
+            # Grab page filters from the first info dict
+            f_qty = infos[0].get("filterQuantity", "Any")
+            f_min = infos[0].get("filterMinPrice", "Any")
+            f_max = infos[0].get("filterMaxPrice", "Any")
+            f_types = infos[0].get("filterTicketTypes")
+            f_ada = infos[0].get("filterADA", False)
+            f_loc = infos[0].get("filterLocation") or "Any"
+            f_date = infos[0].get("filterDateRange") or "Any"
+
+            types_str = ", ".join(f_types) if f_types else "All/Default"
+            ada_str = "Yes" if f_ada else "No"
+            
+            # Formatted onto two lines so it doesn't wrap messily in your terminal
+            logger.info(f"  [DISCOVERY FILTERS] -> Loc: {f_loc} | Dates: {f_date}")
+            logger.info(f"  [TICKET FILTERS]    -> Qty: {f_qty} | Min: ${f_min} | Max: ${f_max} | Types: [{types_str}] | ADA: {ada_str}")
+            
+            sources = {}
+            for info in infos:
+                src = info.get("source", "unknown_source")
+                if src not in sources:
+                    sources[src] = []
+                sources[src].append(info)
+                
+            for src, items in sources.items():
+                logger.info(f"  [{src.upper()}] -> Found {len(items)} items")
+                for i, item in enumerate(items[:3]):
+                    name = str(item.get("eventName", "Unknown")).title()[:35]
+                    price = item.get("price", "N/A")
+                    date = item.get("date", "N/A")
+                    section = item.get("section", "N/A")
+                    row = item.get("row", "N/A")
+                    logger.info(f"      {i+1}. {name} | Date: {date} | Price: ${price} | Sec: {section}, Row: {row}")
+                
+                if len(items) > 3:
+                    logger.info(f"      ... and {len(items) - 3} more items from {src}.")
+        logger.info("▲▲▲==========================▲▲▲")
+        # =====================================================================
+
+        # 4. Filter and Stack logic
+        page_type = infos[0].get("pageType", "unknown") if infos else "unknown"
+        anti_bot = infos[0].get("antiBotStatus", "unknown") if infos else "unknown"
+
+        self._all_infos.append(infos)
+        
+        base_url = url.split("?")[0]
+        existing_idx = next((i for i, e in enumerate(self._navigation_stack) 
+                           if e["base_url"] == base_url and e["page_type"] == page_type), None)
+        
+        page_entry = {
+            "url": url,
+            "base_url": base_url,
+            "page_type": page_type,
+            "anti_bot": anti_bot,
+            "infos": infos,
+        }
+        
+        if existing_idx is not None:
+            self._navigation_stack[existing_idx] = page_entry
+        else:
+            self._navigation_stack.append(page_entry)
+
+    async def compute(self) -> FinalResult:
+        """Compute final coverage score by walking backwards through navigation stack."""
+        event_listing_found = False
+        fallback_infos: list[InfoDict] = []
+        
+        # Walk backwards
+        for page_visit in reversed(self._navigation_stack):
+            page_type = page_visit["page_type"]
+            anti_bot = page_visit["anti_bot"]
+            page_infos = page_visit["infos"]
+
+            if anti_bot == "blocked_perimeterx":
+                logger.error("Cannot verify successful completion: Agent was blocked by PerimeterX.")
+                continue
+                
+            if page_type == "event_listing" and not event_listing_found:
+                event_listing_found = True
+                for i, alternative_conditions in enumerate(self.queries):
+                    if self._is_query_covered[i]:
+                        continue
+                    for info in page_infos:
+                        if self._check_alternative_conditions(i, alternative_conditions, info):
+                            self._is_query_covered[i] = True
+                            break
+                break
+            
+            elif page_type in ["event_category", "search_results"]:
+                fallback_infos.extend(page_infos)
+        
+        # Fallback for sold-out/discovery
+        if not event_listing_found and fallback_infos:
+            for i, alternative_conditions in enumerate(self.queries):
+                if self._is_query_covered[i]:
+                    continue
+                for info in fallback_infos:
+                    if self._check_alternative_conditions(i, alternative_conditions, info):
+                        self._is_query_covered[i] = True
+                        break
+        
+        # Handle exhaustion
+        for i, alternative_conditions in enumerate(self.queries):
+            if self._is_query_covered[i]:
+                continue
+            for j, alternative_condition in enumerate(alternative_conditions):
+                if not self._is_exhausted(alternative_condition, self._unavailable_evidences[i][j]):
+                    break
+            else:
+                self._is_query_covered[i] = True
+
+        n_queries = len(self.queries)
+        n_covered = sum(self._is_query_covered)
+        return FinalResult(
+            score=n_covered / max(n_queries, 1),
+            n_queries=n_queries,
+            n_covered=n_covered,
+            queries=self.queries,
+            is_query_covered=self._is_query_covered,
+        )
+
+    def _check_alternative_conditions(
+        self, i: int, alternative_conditions: list[MultiCandidateQuery], info: InfoDict
+    ) -> bool:
+        for j, alternative_condition in enumerate(alternative_conditions):
+            evidences = self._unavailable_evidences[i][j]
+            if self._check_multi_candidate_query(alternative_condition, info, evidences):
+                return True
+        return False
+
+    @classmethod
+    def _check_multi_candidate_query(
+        cls, query: MultiCandidateQuery, info: InfoDict, evidences: list[InfoDict]
+    ) -> bool:
+        """Check TM-specific query constraints against the scraped InfoDict."""
+        
+        # 1. TEXT / CATEGORY MATCHES
+        if q_names := query.get("event_names"):
+            if not any(q.lower() in info.get("eventName", "").lower() for q in q_names):
+                return False
+
+        if q_categories := query.get("event_categories"):
+            cat = (info.get("eventCategory") or "").lower()
+            if not cat or not any(c.lower() in cat for c in q_categories):
+                return False
+
+        # --- NEW: ENHANCED DISCOVERY PAGE CHECKS (LOCATION) ---
+        if q_cities := query.get("cities"):
+            # Check parsed city from event card OR the typed UI location filter
+            city_data = (info.get("city") or "").lower()
+            filter_loc = (info.get("filterLocation") or "").lower()
+            
+            city_matched = any(c.lower() in city_data for c in q_cities)
+            filter_loc_matched = any(c.lower() in filter_loc for c in q_cities)
+            
+            if not (city_matched or filter_loc_matched):
+                return False
+
+        if q_venues := query.get("venues"):
+            if not any(q.lower() in (info.get("venue") or "").lower() for q in q_venues):
+                return False
+
+
+        # 2. NUMERIC / QUANTITY CONSTRAINTS
+        ticket_count = info.get("ticketCount") or info.get("filterQuantity") or 0
+        if min_tickets := query.get("min_tickets"):
+            if ticket_count < min_tickets:
+                return False
+                
+        if max_tickets := query.get("max_tickets"):
+            if ticket_count > max_tickets:
+                return False
+                
+        if quantities := query.get("ticket_quantities"):
+            if ticket_count not in quantities:
+                return False
+
+        # 3. PRICE & CURRENCY CONSTRAINTS
+        price = info.get("price") or info.get("filterMaxPrice")
+        if max_price := query.get("max_price"):
+            if price is None or price > max_price:
+                return False
+                
+        if min_price := query.get("min_price"):
+            if price is None or price < min_price:
+                return False
+                
+        if req_currency := query.get("currency"):
+            info_currency = (info.get("currency") or "USD").lower()
+            if req_currency.lower() != info_currency:
+                return False
+
+        # 4. SEAT LOCATION CONSTRAINTS
+        if q_sections := query.get("sections"):
+            info_sec = (info.get("section") or "").lower()
+            if not info_sec or not any(s.lower() in info_sec for s in q_sections):
+                return False
+                
+        if q_rows := query.get("rows"):
+            info_row = (info.get("row") or "").lower()
+            if not info_row or not any(r.lower() in info_row for r in q_rows):
+                return False
+
+        # 5. TICKET TYPE & RESALE CONSTRAINTS
+        if q_types := query.get("ticket_types"):
+            info_type = (info.get("ticketType") or "standard").lower()
+            # Also check the filter array if the individual ticket is missing data
+            filter_types = info.get("filterTicketTypes") or []
+            
+            type_matched = any(t.lower() in info_type for t in q_types)
+            filter_type_matched = any(t.lower() in [ft.lower() for ft in filter_types] for t in q_types)
+            
+            if not (type_matched or filter_type_matched):
+                return False
+
+        if query.get("require_resale") is True:
+            if not info.get("isResale", False) and "resale" not in (info.get("filterTicketTypes") or []):
+                return False
+            
+        if query.get("exclude_resale") is True:
+            if info.get("isResale", False) or "resale" in (info.get("filterTicketTypes") or []):
+                return False
+
+        # 6. PAGE TYPE & STATUS CONSTRAINTS
+        if req_page_type := query.get("require_page_type"):
+            info_page_type = info.get("pageType", "")
+            if isinstance(req_page_type, list):
+                if info_page_type not in req_page_type:
+                    return False
+            else:
+                if info_page_type != req_page_type:
+                    return False
+
+        info_status = info.get("availabilityStatus", "").lower()
+        if req_statuses := query.get("availability_statuses"):
+            if info_status not in [s.lower() for s in req_statuses]:
+                return False
+
+        # 7. DATE, TIME & BASE AVAILABILITY
+        require_available = query.get("require_available", False)
+        is_unavailable = info_status in ["sold_out", "queue", "future_sale", "cancelled"]
+
+        # --- NEW: ENHANCED DISCOVERY PAGE CHECKS (DATES) ---
+        # Helper function to check if the query date is satisfied by the UI Date Range filter
+        def is_date_satisfied(q_dates):
+            info_date = info.get("date")
+            if info_date in q_dates:
+                return True
+            
+            # Fallback to UI Filter Date Range (e.g. "Mar 3 - Apr 30, 2026")
+            filter_date = info.get("filterDateRange")
+            if filter_date:
+                # Basic check: if the user set a date range filter, and we are on the discovery page
+                # we grant a pass for navigation tasks.
+                return True 
+            return False
+
+        if is_unavailable:
+            if require_available:
+                evidences.append(info)
+                return False
+            else:
+                if q_dates := query.get("dates"):
+                    if not is_date_satisfied(q_dates):
+                        return False
+                if q_times := query.get("times"):
+                    if info.get("parsedTime") not in q_times and info.get("time") not in q_times:
+                        return False
+                return True
+        else:
+            if q_dates := query.get("dates"):
+                if not is_date_satisfied(q_dates):
+                    return False
+            if q_times := query.get("times"):
+                if info.get("parsedTime") not in q_times and info.get("time") not in q_times:
+                    return False
+            return True
+
+    @classmethod
+    def _check_single_candidate_query(cls, query: SingleCandidateQuery, info: InfoDict) -> bool:
+        if (q_name := query.get("event_name")) and info.get("eventName", "").lower() != q_name.lower():
+            return False
+        if (q_date := query.get("date")) and info.get("date") != q_date:
+            return False
+        return True
+
+    @classmethod
+    def _is_exhausted(cls, query: MultiCandidateQuery, evidences: list[InfoDict]) -> bool:
+        q_names = query.get("event_names") or [None]
+        q_dates = query.get("dates") or [None]
+
+        for q_name, q_date in itertools.product(q_names, q_dates):
+            if not any(cls._check_single_candidate_query({"event_name": q_name, "date": q_date}, info) for info in evidences):
+                return False
+        return True
+
+
+def generate_task_config_deterministic(
+    mode: Literal["any", "all"],
+    task: str,
+    queries: list[list[MultiCandidateQuery]],
+    location: str,
+    timezone: str,
+    timestamp: int | None = None,
+    url: str = "https://www.ticketmaster.com",
+) -> BaseTaskConfig:
+    user_metadata = initialize_user_metadata(timezone, location, timestamp)
+    eval_config = {
+        "_target_": get_import_path(TicketmasterInfoGathering),
+        "queries": queries
+    }
+    return BaseTaskConfig(url=url, task=task, user_metadata=user_metadata, eval_config=eval_config)
