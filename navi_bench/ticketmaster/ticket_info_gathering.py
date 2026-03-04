@@ -417,13 +417,14 @@ class TicketmasterInfoGathering(BaseMetric):
                 return False
 
         # 3. PRICE & CURRENCY CONSTRAINTS
-        price = info.get("price") or info.get("filterMaxPrice")
         if max_price := query.get("max_price"):
-            if price is None or price > max_price:
+            eval_max_price = info.get("price") or info.get("filterMaxPrice")
+            if eval_max_price is None or eval_max_price > max_price:
                 return False
                 
         if min_price := query.get("min_price"):
-            if price is None or price < min_price:
+            eval_min_price = info.get("price") or info.get("filterMinPrice")
+            if eval_min_price is None or eval_min_price < min_price:
                 return False
                 
         if req_currency := query.get("currency"):
@@ -519,7 +520,7 @@ class TicketmasterInfoGathering(BaseMetric):
 
     @classmethod
     def _check_single_candidate_query(cls, query: SingleCandidateQuery, info: InfoDict) -> bool:
-        if (q_name := query.get("event_name")) and info.get("eventName", "").lower() != q_name.lower():
+        if (q_name := query.get("event_name")) and q_name.lower() not in info.get("eventName", "").lower():
             return False
         if (q_date := query.get("date")) and info.get("date") != q_date:
             return False
