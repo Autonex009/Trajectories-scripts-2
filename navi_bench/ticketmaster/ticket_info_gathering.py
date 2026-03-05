@@ -492,9 +492,21 @@ class TicketmasterInfoGathering(BaseMetric):
             # Fallback to UI Filter Date Range (e.g. "Mar 3 - Apr 30, 2026")
             filter_date = info.get("filterDateRange")
             if filter_date:
-                # Basic check: if the user set a date range filter, and we are on the discovery page
-                # we grant a pass for navigation tasks.
-                return True 
+                range_match = re.search(r'(\w+\s+\d+).*?(\w+\s+\d+,\s*\d{4})', filter_date)
+                if range_match:
+                    try:
+                        year = datetime.now().year
+                        range_start = datetime.strptime(range_match.group(1) + f" {year}", "%b %d %Y")
+                        range_end = datetime.strptime(range_match.group(2).replace(',', ''), "%b %d %Y")
+                        for q_date in q_dates:
+                            try:
+                                qd = datetime.strptime(q_date, "%Y-%m-%d")
+                                if range_start <= qd <= range_end:
+                                    return True
+                            except ValueError:
+                                continue
+                    except ValueError:
+                        pass
             return False
 
         if is_unavailable:

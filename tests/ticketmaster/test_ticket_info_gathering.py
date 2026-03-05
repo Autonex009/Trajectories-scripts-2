@@ -345,7 +345,7 @@ class TestUpdateAndComputeIntegration:
                 InfoDict(
                     pageType="search_results",
                     filterLocation="Chicago",
-                    filterDateRange="Apr 18, 2026",
+                    filterDateRange="Apr 15 - Apr 30, 2026",
                     availabilityStatus="available"
                 )
             ],
