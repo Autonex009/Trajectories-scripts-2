@@ -136,13 +136,37 @@ class VividSeatsInfoGathering(BaseMetric):
         # =====================================================================
         if infos:
             print(f"\n[SCRAPED DATA FROM: {page.url[:60]}...]", flush=True)
-            for i, item in enumerate(infos[:10], 1): # Print first 10 items to avoid flooding
+            
+            # --- NEW: Print Active Filters ---
+            first_info = infos[0]
+            qty = first_info.get("filterQuantity")
+            min_p = first_info.get("filterMinPrice")
+            max_p = first_info.get("filterMaxPrice")
+            ss_only = first_info.get("filterSuperSeller")
+            filter_date = first_info.get("filterDate")
+            
+            filters_applied = []
+            if filter_date: filters_applied.append(f"Date: {filter_date}")
+            if qty is not None: filters_applied.append(f"Qty: {qty}")
+            if min_p is not None: filters_applied.append(f"Min Price: ${min_p}")
+            if max_p is not None: filters_applied.append(f"Max Price: ${max_p}")
+            if ss_only: filters_applied.append("Super Seller Only")
+            
+            if filters_applied:
+                print(f"  [ACTIVE FILTERS] ➔ {' | '.join(filters_applied)}", flush=True)
+            else:
+                print(f"  [ACTIVE FILTERS] ➔ None detected", flush=True)
+            print("-" * 65)
+            # ---------------------------------
+
+            for i, item in enumerate(infos[:10], 1): # Print first 10 items
                 name = item.get("eventName", "Unknown").title()
                 price = item.get("price", "N/A")
                 sec = item.get("section", "N/A")
                 row = item.get("row", "N/A")
                 seller = "🌟 Super Seller" if item.get("isSuperSeller") else "🎫 Standard"
                 print(f"  {i}. {name} | Sec: {sec}, Row: {row} | ${price} | {seller}", flush=True)
+            
             if len(infos) > 10:
                 print(f"  ... and {len(infos) - 10} more items.", flush=True)
         # =====================================================================

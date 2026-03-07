@@ -113,25 +113,73 @@
     const Scraper = {
         pageFilters: () => {
             try {
-                // Vivid Seats quantity selector
-                const qtySelect = document.querySelector('[data-testid="quantity-filter"], select[name="quantity"]');
-                const selectedQuantity = qtySelect ? parseInt(qtySelect.value || getText(qtySelect)) : null;
+                let filterQuantity = null;
+                let filterMinPrice = null;
+                let filterMaxPrice = null;
+                let filterDate = null;
 
-                // Price inputs
-                const minInput = document.querySelector('[data-testid="price-min-input"]');
-                const maxInput = document.querySelector('[data-testid="price-max-input"]');
+                // 1. Grab Quantity from the active filter button
+                const qtyBtn = document.querySelector('[data-testid="show-quantity-filter-button"], [data-testid="Quantity-filter-button"]');
+                if (qtyBtn) {
+                    const qtyText = getText(qtyBtn);
+                    const qtyMatch = qtyText ? qtyText.match(/(\d+)/) : null;
+                    if (qtyMatch) filterQuantity = parseInt(qtyMatch[1]);
+                }
+
+                // 2. Grab Min and Max Price from the active price button
+                const priceBtn = document.querySelector('[data-testid="show-price-filter-button"], [data-testid="Price-filter-button"]');
+                if (priceBtn) {
+                    const priceText = getText(priceBtn);
+                    if (priceText) {
+                        // Extract all dollar amounts in the string
+                        const priceMatches = [...priceText.matchAll(/[$£€₹]?\s*([\d,]+(?:\.\d{2})?)/g)];
+                        if (priceMatches.length >= 1) {
+                            filterMinPrice = parseFloat(priceMatches[0][1].replace(/,/g, ''));
+                        }
+                        if (priceMatches.length >= 2) {
+                            filterMaxPrice = parseFloat(priceMatches[1][1].replace(/,/g, ''));
+                        }
+                    }
+                }
                 
-                // Super Seller Toggle
+                // 3. NEW: "Tickets under X" Quick Filter (General Listing Page)
+                const underXBtn = document.querySelector('[data-testid="tickets-under-x-filter-button"]');
+                // Only use this if standard max price isn't already set, and check if it's not just a default label
+                if (underXBtn && !filterMaxPrice) { 
+                    const underXText = getText(underXBtn);
+                    if (underXText && underXText.toLowerCase().includes('under')) {
+                        const match = underXText.match(/[$£€₹]?\s*([\d,]+(?:\.\d{2})?)/);
+                        // Make sure the button is actually active (Vivid removes 'MuiChip-outlined' when active)
+                        const isOutlined = underXBtn.className.includes('MuiChip-outlined');
+                        if (match && !isOutlined) {
+                            filterMaxPrice = parseFloat(match[1].replace(/,/g, ''));
+                        }
+                    }
+                }
+
+                // 4. NEW: Date Filter (General Listing Page)
+                const dateFilterBtn = document.querySelector('[data-testid="date-filter-button"]');
+                if (dateFilterBtn) {
+                    const dateText = getText(dateFilterBtn);
+                    // If it says exactly "Date", the user hasn't selected a specific date yet
+                    if (dateText && dateText.toLowerCase() !== 'date') {
+                        filterDate = Parsers.date(dateText) || dateText;
+                    }
+                }
+
+                // 5. Super Seller Toggle
                 const superSellerToggle = document.querySelector('[data-testid="super-seller-toggle"]');
                 const isSuperSellerOnly = superSellerToggle ? superSellerToggle.getAttribute('aria-checked') === 'true' : false;
 
                 return {
-                    filterQuantity: selectedQuantity || null,
-                    filterMinPrice: minInput ? Parsers.price(minInput.value) : null,
-                    filterMaxPrice: maxInput ? Parsers.price(maxInput.value) : null,
+                    filterQuantity: filterQuantity,
+                    filterMinPrice: filterMinPrice,
+                    filterMaxPrice: filterMaxPrice,
                     filterSuperSeller: isSuperSellerOnly,
+                    filterDate: filterDate
                 };
             } catch (e) { 
+                console.error("Error parsing filters", e);
                 return {}; 
             }
         },
