@@ -171,12 +171,27 @@
                 const superSellerToggle = document.querySelector('[data-testid="super-seller-toggle"]');
                 const isSuperSellerOnly = superSellerToggle ? superSellerToggle.getAttribute('aria-checked') === 'true' : false;
 
+                // 6. NEW: Zone Filters (e.g. "Upper Level", "Club Level")
+                const activeZones = [];
+                const zoneBtns = document.querySelectorAll('[data-testid="zone-chip-container"] button');
+                zoneBtns.forEach(btn => {
+                    // Look for the 'activated' substring in the class name
+                    const isActivated = btn.className.includes('activated');
+                    const isDisabled = btn.disabled || btn.className.includes('Mui-disabled');
+                    
+                    if (isActivated && !isDisabled) {
+                        const zoneText = getText(btn);
+                        if (zoneText) activeZones.push(zoneText.toLowerCase());
+                    }
+                });
+
                 return {
                     filterQuantity: filterQuantity,
                     filterMinPrice: filterMinPrice,
                     filterMaxPrice: filterMaxPrice,
                     filterSuperSeller: isSuperSellerOnly,
-                    filterDate: filterDate
+                    filterDate: filterDate,
+                    filterZones: activeZones
                 };
             } catch (e) { 
                 console.error("Error parsing filters", e);

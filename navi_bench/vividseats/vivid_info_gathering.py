@@ -24,11 +24,12 @@ class MultiCandidateQuery(TypedDict, total=False):
     cities: list[str] | None
     venues: list[str] | None
     
-    min_tickets: int | None
+    quantity: int | None
     max_price: float | None
     min_price: float | None
     sections: list[str] | None
     rows: list[str] | None
+    zones: list[str] | None
     
     require_super_seller: bool | None  # Vivid Seats specific feature
     require_available: bool | None
@@ -51,6 +52,8 @@ class InfoDict(TypedDict, total=False):
     filterQuantity: int
     filterMinPrice: float
     filterMaxPrice: float
+    filterDate: str
+    filterZones: list[str]
     filterSuperSeller: bool
 
 class FinalResult(BaseModel):
@@ -144,12 +147,14 @@ class VividSeatsInfoGathering(BaseMetric):
             max_p = first_info.get("filterMaxPrice")
             ss_only = first_info.get("filterSuperSeller")
             filter_date = first_info.get("filterDate")
+            filter_zones = first_info.get("filterZones", [])
             
             filters_applied = []
             if filter_date: filters_applied.append(f"Date: {filter_date}")
             if qty is not None: filters_applied.append(f"Qty: {qty}")
             if min_p is not None: filters_applied.append(f"Min Price: ${min_p}")
             if max_p is not None: filters_applied.append(f"Max Price: ${max_p}")
+            if filter_zones: filters_applied.append(f"Zones: {', '.join(filter_zones).title()}")
             if ss_only: filters_applied.append("Super Seller Only")
             
             if filters_applied:
@@ -248,6 +253,12 @@ class VividSeatsInfoGathering(BaseMetric):
 
         if q_dates := query.get("dates"):
             if info.get("date") not in q_dates: return False
+        
+        if q_zones := query.get("zones"):
+            info_zones = info.get("filterZones") or []
+            # Fails if no zones are active, or if none of the requested zones match the active ones
+            if not info_zones or not any(z.lower() in [iz.lower() for iz in info_zones] for z in q_zones): 
+                return False
 
         return True
 
