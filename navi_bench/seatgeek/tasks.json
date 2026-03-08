@@ -1,0 +1,399 @@
+[
+    {
+        "id": "seatgeek_tp_01",
+        "name": "Lakers game search",
+        "type": "TP",
+        "description": "Find Lakers tickets for an upcoming game",
+        "expected_result": true,
+        "url": "https://seatgeek.com",
+        "navigation_hint": "Search for 'Lakers' or navigate to /los-angeles-lakers-tickets, then click an upcoming game",
+        "task": "Find Los Angeles Lakers tickets for an upcoming NBA game",
+        "queries": [
+            [
+                {
+                    "event_names": [
+                        "lakers",
+                        "los angeles lakers"
+                    ],
+                    "event_categories": [
+                        "sports",
+                        "nba"
+                    ],
+                    "cities": [
+                        "los angeles",
+                        "inglewood"
+                    ]
+                }
+            ]
+        ],
+        "location": "Los Angeles, CA, United States",
+        "timezone": "America/Los_Angeles",
+        "category": "sports"
+    },
+    {
+        "id": "seatgeek_tp_02",
+        "name": "Lakers at Suns with quantity filter",
+        "type": "TP",
+        "description": "Find Lakers at Suns tickets with quantity=2",
+        "expected_result": true,
+        "url": "https://seatgeek.com",
+        "navigation_hint": "Navigate to the Lakers at Suns game and set quantity to 2",
+        "task": "Find 2 tickets for the Lakers at Suns game in Phoenix",
+        "queries": [
+            [
+                {
+                    "event_names": [
+                        "lakers",
+                        "suns"
+                    ],
+                    "cities": [
+                        "phoenix"
+                    ],
+                    "url_quantity": 2
+                }
+            ]
+        ],
+        "location": "Phoenix, AZ, United States",
+        "timezone": "America/Phoenix",
+        "category": "sports"
+    },
+    {
+        "id": "seatgeek_tp_03",
+        "name": "Concert search – Taylor Swift",
+        "type": "TP",
+        "description": "Find Taylor Swift concert tickets",
+        "expected_result": true,
+        "url": "https://seatgeek.com",
+        "navigation_hint": "Search for 'Taylor Swift' to find concert tickets",
+        "task": "Find Taylor Swift concert tickets",
+        "queries": [
+            [
+                {
+                    "event_names": [
+                        "taylor swift"
+                    ],
+                    "event_categories": [
+                        "concerts",
+                        "music"
+                    ]
+                }
+            ]
+        ],
+        "location": "New York, NY, United States",
+        "timezone": "America/New_York",
+        "category": "concerts"
+    },
+    {
+        "id": "seatgeek_tp_04",
+        "name": "NBA game with price filter",
+        "type": "TP",
+        "description": "Find NBA tickets under $200",
+        "expected_result": true,
+        "url": "https://seatgeek.com",
+        "navigation_hint": "Navigate to any NBA game and apply max_price=200 filter",
+        "task": "Find NBA tickets for under $200",
+        "queries": [
+            [
+                {
+                    "event_categories": [
+                        "sports",
+                        "nba"
+                    ],
+                    "max_price": 200
+                }
+            ]
+        ],
+        "location": "Los Angeles, CA, United States",
+        "timezone": "America/Los_Angeles",
+        "category": "sports"
+    },
+    {
+        "id": "seatgeek_tp_05",
+        "name": "Theater show – Hamilton",
+        "type": "TP",
+        "description": "Find Hamilton theater tickets",
+        "expected_result": true,
+        "url": "https://seatgeek.com",
+        "navigation_hint": "Search for 'Hamilton' to find theater tickets",
+        "task": "Find Hamilton tickets on Broadway",
+        "queries": [
+            [
+                {
+                    "event_names": [
+                        "hamilton"
+                    ],
+                    "event_categories": [
+                        "theater"
+                    ]
+                }
+            ]
+        ],
+        "location": "New York, NY, United States",
+        "timezone": "America/New_York",
+        "category": "theater"
+    },
+    {
+        "id": "seatgeek_tp_06",
+        "name": "NFL game search",
+        "type": "TP",
+        "description": "Find NFL game tickets for the Dallas Cowboys",
+        "expected_result": true,
+        "url": "https://seatgeek.com",
+        "navigation_hint": "Navigate to /dallas-cowboys-tickets and select a game",
+        "task": "Find Dallas Cowboys tickets for an upcoming NFL game",
+        "queries": [
+            [
+                {
+                    "event_names": [
+                        "cowboys",
+                        "dallas cowboys"
+                    ],
+                    "event_categories": [
+                        "sports",
+                        "nfl"
+                    ],
+                    "cities": [
+                        "arlington",
+                        "dallas"
+                    ]
+                }
+            ]
+        ],
+        "location": "Dallas, TX, United States",
+        "timezone": "America/Chicago",
+        "category": "sports"
+    },
+    {
+        "id": "seatgeek_tp_07",
+        "name": "MLB game with venue filter",
+        "type": "TP",
+        "description": "Find Yankees tickets at Yankee Stadium",
+        "expected_result": true,
+        "url": "https://seatgeek.com",
+        "navigation_hint": "Search for Yankees and find games at Yankee Stadium",
+        "task": "Find New York Yankees tickets at Yankee Stadium",
+        "queries": [
+            [
+                {
+                    "event_names": [
+                        "yankees"
+                    ],
+                    "venues": [
+                        "yankee stadium"
+                    ]
+                }
+            ]
+        ],
+        "location": "New York, NY, United States",
+        "timezone": "America/New_York",
+        "category": "sports"
+    },
+    {
+        "id": "seatgeek_tn_01",
+        "name": "Wrong city for Lakers",
+        "type": "TN",
+        "description": "Agent finds Lakers game but in wrong city (should be LA, agent is in Chicago)",
+        "expected_result": false,
+        "url": "https://seatgeek.com",
+        "navigation_hint": "Agent navigates to Bulls vs Lakers in Chicago (wrong city for query)",
+        "task": "Find Lakers home game tickets in Los Angeles",
+        "queries": [
+            [
+                {
+                    "event_names": [
+                        "lakers"
+                    ],
+                    "cities": [
+                        "los angeles"
+                    ],
+                    "require_page_type": "event_listing"
+                }
+            ]
+        ],
+        "location": "Chicago, IL, United States",
+        "timezone": "America/Chicago",
+        "category": "sports"
+    },
+    {
+        "id": "seatgeek_tn_02",
+        "name": "Wrong sport category",
+        "type": "TN",
+        "description": "Agent finds concert when asked for NBA game",
+        "expected_result": false,
+        "url": "https://seatgeek.com",
+        "navigation_hint": "Agent navigates to concert page instead of sports",
+        "task": "Find NBA basketball tickets for tonight",
+        "queries": [
+            [
+                {
+                    "event_categories": [
+                        "sports",
+                        "nba"
+                    ],
+                    "require_page_type": "event_listing"
+                }
+            ]
+        ],
+        "location": "Los Angeles, CA, United States",
+        "timezone": "America/Los_Angeles",
+        "category": "sports"
+    },
+    {
+        "id": "seatgeek_tn_03",
+        "name": "Wrong performer",
+        "type": "TN",
+        "description": "Agent finds Celtics game when asked for Lakers",
+        "expected_result": false,
+        "url": "https://seatgeek.com",
+        "navigation_hint": "Agent navigates to Celtics game page (wrong team)",
+        "task": "Find Lakers tickets for upcoming game",
+        "queries": [
+            [
+                {
+                    "event_names": [
+                        "lakers",
+                        "los angeles lakers"
+                    ],
+                    "require_page_type": "event_listing"
+                }
+            ]
+        ],
+        "location": "Los Angeles, CA, United States",
+        "timezone": "America/Los_Angeles",
+        "category": "sports"
+    },
+    {
+        "id": "seatgeek_fp_01",
+        "name": "Category page shows correct event",
+        "type": "FP",
+        "description": "Agent on NBA category page with Lakers game visible in list",
+        "expected_result": true,
+        "url": "https://seatgeek.com",
+        "navigation_hint": "Agent navigates to /nba-tickets where Lakers game is listed",
+        "task": "Find Lakers NBA game tickets",
+        "queries": [
+            [
+                {
+                    "event_names": [
+                        "lakers"
+                    ],
+                    "event_categories": [
+                        "sports",
+                        "nba"
+                    ]
+                }
+            ]
+        ],
+        "location": "Los Angeles, CA, United States",
+        "timezone": "America/Los_Angeles",
+        "category": "sports"
+    },
+    {
+        "id": "seatgeek_fp_02",
+        "name": "Performer page without clicking event",
+        "type": "FP",
+        "description": "Agent on performer page but hasn't clicked into specific event",
+        "expected_result": true,
+        "url": "https://seatgeek.com",
+        "navigation_hint": "Agent navigates to /los-angeles-lakers-tickets but doesn't click any event",
+        "task": "Browse Lakers upcoming games",
+        "queries": [
+            [
+                {
+                    "event_names": [
+                        "lakers"
+                    ],
+                    "require_page_type": [
+                        "performer",
+                        "event_listing"
+                    ]
+                }
+            ]
+        ],
+        "location": "Los Angeles, CA, United States",
+        "timezone": "America/Los_Angeles",
+        "category": "sports"
+    },
+    {
+        "id": "seatgeek_tp_08",
+        "name": "Combined filters – quantity and price",
+        "type": "TP",
+        "description": "Find 4 tickets under $150 for an NBA game",
+        "expected_result": true,
+        "url": "https://seatgeek.com",
+        "navigation_hint": "Navigate to NBA game, set quantity=4 and max_price=150",
+        "task": "Find 4 NBA tickets for under $150 each",
+        "queries": [
+            [
+                {
+                    "event_categories": [
+                        "sports",
+                        "nba"
+                    ],
+                    "url_quantity": 4,
+                    "max_price": 150
+                }
+            ]
+        ],
+        "location": "Los Angeles, CA, United States",
+        "timezone": "America/Los_Angeles",
+        "category": "sports"
+    },
+    {
+        "id": "seatgeek_tp_09",
+        "name": "Search redirect to performer",
+        "type": "TP",
+        "description": "Search for 'Lakers' which auto-redirects to performer page",
+        "expected_result": true,
+        "url": "https://seatgeek.com",
+        "navigation_hint": "Use the search bar to search 'Lakers', should redirect to performer page",
+        "task": "Search for Lakers and view their upcoming games",
+        "queries": [
+            [
+                {
+                    "event_names": [
+                        "lakers",
+                        "los angeles lakers"
+                    ],
+                    "require_page_type": [
+                        "performer",
+                        "event_listing",
+                        "search"
+                    ]
+                }
+            ]
+        ],
+        "location": "Los Angeles, CA, United States",
+        "timezone": "America/Los_Angeles",
+        "category": "sports"
+    },
+    {
+        "id": "seatgeek_tp_10",
+        "name": "MLS game search",
+        "type": "TP",
+        "description": "Find LAFC soccer tickets",
+        "expected_result": true,
+        "url": "https://seatgeek.com",
+        "navigation_hint": "Search for 'LAFC' to find MLS tickets",
+        "task": "Find LAFC tickets for an upcoming MLS game",
+        "queries": [
+            [
+                {
+                    "event_names": [
+                        "lafc",
+                        "los angeles fc",
+                        "los angeles football club"
+                    ],
+                    "event_categories": [
+                        "sports",
+                        "mls",
+                        "soccer"
+                    ]
+                }
+            ]
+        ],
+        "location": "Los Angeles, CA, United States",
+        "timezone": "America/Los_Angeles",
+        "category": "sports"
+    }
+]
