@@ -117,6 +117,7 @@
                 let filterMinPrice = null;
                 let filterMaxPrice = null;
                 let filterDate = null;
+                let activeZones = [];
 
                 // 1. Grab Quantity from the active filter button
                 const qtyBtn = document.querySelector('[data-testid="show-quantity-filter-button"], [data-testid="Quantity-filter-button"]');
@@ -142,7 +143,7 @@
                     }
                 }
                 
-                // 3. NEW: "Tickets under X" Quick Filter (General Listing Page)
+                // 3. "Tickets under X" Quick Filter (General Listing Page)
                 const underXBtn = document.querySelector('[data-testid="tickets-under-x-filter-button"]');
                 // Only use this if standard max price isn't already set, and check if it's not just a default label
                 if (underXBtn && !filterMaxPrice) { 
@@ -157,7 +158,7 @@
                     }
                 }
 
-                // 4. NEW: Date Filter (General Listing Page)
+                // 4. Date Filter (General Listing Page)
                 const dateFilterBtn = document.querySelector('[data-testid="date-filter-button"]');
                 if (dateFilterBtn) {
                     const dateText = getText(dateFilterBtn);
@@ -171,8 +172,7 @@
                 const superSellerToggle = document.querySelector('[data-testid="super-seller-toggle"]');
                 const isSuperSellerOnly = superSellerToggle ? superSellerToggle.getAttribute('aria-checked') === 'true' : false;
 
-                // 6. NEW: Zone Filters (e.g. "Upper Level", "Club Level")
-                const activeZones = [];
+                // 6. Zone Filters (e.g. "Upper Level", "Club Level")
                 const zoneBtns = document.querySelectorAll('[data-testid="zone-chip-container"] button');
                 zoneBtns.forEach(btn => {
                     // Look for the 'activated' substring in the class name
@@ -191,7 +191,7 @@
                     filterMaxPrice: filterMaxPrice,
                     filterSuperSeller: isSuperSellerOnly,
                     filterDate: filterDate,
-                    filterZones: activeZones
+                    filterZones: activeZones // Ensure this is always returned
                 };
             } catch (e) { 
                 console.error("Error parsing filters", e);
@@ -231,41 +231,100 @@
         ticketListings: () => {
             const collected = [];
             
-            // Grab the event name from the top header breadcrumb/title
-            const headerTitleNode = document.querySelector('[data-testid="production-detail-bar-performer-link"], h1');
-            const eventNameContext = headerTitleNode ? getText(headerTitleNode) : "";
+            // Extract Event Title and Venue from header
+            const headerTitleNode = document.querySelector('[data-testid="production-detail-bar-performer-link"], h1, [data-testid="event-title"]');
+            const eventNameContext = headerTitleNode ? getText(headerTitleNode).trim() : "";
 
-            // Target the specific ticket rows using Vivid's data attributes
-            const rows = document.querySelectorAll('div[data-rowid], [data-testid="listing-row-container"] > div');
+            // Extract City/Location from header
+            const locationElement = document.querySelector('[data-testid="event-location"], .event-location-text');
+            let cityField = "";
+            if (locationElement) {
+                const locText = getText(locationElement);
+                if (locText) {
+                    cityField = locText.split(',')[0].trim();
+                }
+            }
+
+            // Target the specific ticket rows
+            const rows = document.querySelectorAll('div[data-rowid], [data-testid="listing-row-container"] > div, [data-testid="listing-card"], .listing-item, li[data-ticket-id]');
 
             rows.forEach(row => {
                 try {
-                    // 1. Get Price (Prefer the data-attribute, fallback to the text node)
+                    // 1. Get Price
                     const dataPrice = row.getAttribute('data-price');
-                    const priceNode = row.querySelector('[data-testid="listing-price"]');
+                    const priceNode = row.querySelector('[data-testid="listing-price"], .ticket-price');
                     const rawPrice = dataPrice || (priceNode ? getText(priceNode) : getText(row));
                     const extractedPrice = Parsers.price(rawPrice);
 
                     if (!extractedPrice) return;
 
-                    // 2. Get Row (Prefer the data-attribute, fallback to the row node)
+                    // 2. Get Quantity
+                    const qtyElement = row.querySelector('[data-testid="listing-quantity"], .ticket-quantity');
+                    let qtyVal = 1;
+                    if (qtyElement) {
+                        const qtyText = getText(qtyElement).replace(/[^0-9]/g, '');
+                        qtyVal = parseInt(qtyText, 10) || 1;
+                    }
+
+                    // 3. Section, Zone, and Row Logic
+                    let sectionText = "";
+                    let rowText = "";
+                    let zoneText = "";
+                    
+                    const seatingElement = row.querySelector('[data-testid="listing-seating"], .seating-info, [class*="sectionContent"] [class*="MuiTypography"], [class*="styles_sectionColumn"] [class*="styles_nowrap"]');
+                    const seatInfo = seatingElement ? getText(seatingElement).toLowerCase() : getText(row).toLowerCase();
+
+                    // Parse Zone
+                    if (seatInfo.includes('zone:')) {
+                        zoneText = seatInfo.split('zone:')[1].split('|')[0].trim();
+                    }
+
+                    // Parse Section
+                    if (seatInfo.includes('sec:')) {
+                        sectionText = seatInfo.split('sec:')[1].split('|')[0].trim();
+                    } else if (seatInfo.includes('section')) {
+                        sectionText = seatInfo.split('section')[1].split(',')[0].trim();
+                    } else {
+                        // Fallback section parsing
+                        sectionText = extractByPattern(getText(row), {s: /(?:\bSection\b|\bSec\b|Zone)\s+([A-Za-z0-9\s]+?)(?=\s*(?:[•·,:-]|\bRow\b|$))/i}) || "";
+                        if(!sectionText && seatingElement && !seatInfo.includes('row')) {
+                           sectionText = seatInfo.split(',')[0].trim();
+                        }
+                    }
+
+                    // Parse Row specifically to handle the edge cases
                     const dataRow = row.getAttribute('data-rowid');
                     const rowNode = row.querySelector('[data-testid="row"]');
-                    const rowNum = dataRow || (rowNode ? getText(rowNode).replace(/Row/i, '').trim() : extractByPattern(getText(row), {r: /\bRow\s+([A-Za-z0-9]+)/i}));
+                    
+                    if (dataRow) {
+                         rowText = dataRow;
+                    } else if (rowNode) {
+                         rowText = getText(rowNode).replace(/Row/i, '').trim();
+                    } else if (seatInfo.includes('row:')) {
+                        rowText = seatInfo.split('row:')[1].split('|')[0].trim();
+                    } else if (seatInfo.includes('row')) {
+                        rowText = seatInfo.split('row')[1].split('|')[0].trim();
+                    } else {
+                        rowText = extractByPattern(getText(row), {r: /\bRow\s+([A-Za-z0-9]+)/i}) || "";
+                    }
+                    
+                    // Clean up row text to just alphanumeric chars to match testing expectations
+                    if(rowText) {
+                        rowText = rowText.replace(/[^a-z0-9]/gi, '');
+                    }
 
-                    // 3. Get Section (It's usually the first bold typography element in the section column)
-                    const sectionNode = row.querySelector('[class*="sectionContent"] [class*="MuiTypography"], [class*="styles_sectionColumn"] [class*="styles_nowrap"]');
-                    const section = sectionNode ? getText(sectionNode) : extractByPattern(getText(row), {s: /(?:\bSection\b|\bSec\b|Zone)\s+([A-Za-z0-9\s]+?)(?=\s*(?:[•·,:-]|\bRow\b|$))/i});
-
-                    // 4. Check for Super Seller (Look for the specific green badge/icon class)
-                    const isSuperSeller = row.querySelector('[class*="superSellerIcon"], [class*="ticket-super-seller"]') !== null || Enrichment.isSuperSeller(getText(row));
+                    // 4. Check for Super Seller
+                    const isSuperSeller = row.querySelector('[class*="superSellerIcon"], [class*="ticket-super-seller"], [data-testid="super-seller-badge"], img[alt*="Super Seller"]') !== null || Enrichment.isSuperSeller(getText(row));
 
                     collected.push({
                         source: "dom_ticket_listing",
-                        eventName: eventNameContext.toLowerCase(), 
+                        eventName: eventNameContext.toLowerCase(), // Venue is contained here
+                        city: cityField.toLowerCase(),
                         price: extractedPrice,
-                        section: section,
-                        row: rowNum,
+                        ticketCount: qtyVal,
+                        section: sectionText,
+                        zone: zoneText || sectionText, // Map zone to section if explicit zone missing
+                        row: rowText,
                         isSuperSeller: isSuperSeller,
                         availabilityStatus: 'available',
                         info: getText(row)
@@ -308,8 +367,7 @@
                         collected.push({
                             source: "dom_event_card",
                             url: href || url,
-                            eventName: eventName.toLowerCase(),
-                            // Vivid Seats URLs usually contain the date (e.g., ...-4-10-2026), so we parse the URL as a fallback if the text parse fails
+                            eventName: eventName.toLowerCase() + (locationText ? ` - ${locationText.toLowerCase()}` : ""), // Append venue to eventName
                             date: Parsers.date(rawDateText) || Parsers.date(href), 
                             time: Parsers.time(rawDateText),
                             price: Parsers.price(priceText),
@@ -332,18 +390,23 @@
         scraped.push(...Scraper.ticketListings());
         scraped.push(...Scraper.eventCards());
 
+        const filters = Scraper.pageFilters();
+
         if (scraped.length === 0) {
+            // Fallback for search/discovery pages when no specific listings render
+            const headerTitleNode = document.querySelector('h1') || document.querySelector('[data-testid="event-title"]');
+            
             scraped.push({
                 source: "fallback_metadata",
                 url: url,
-                eventName: getText(document.querySelector('h1'))?.toLowerCase() || 'unknown',
-                info: "No specific elements found. Check antiBot state."
+                eventName: headerTitleNode ? getText(headerTitleNode).toLowerCase() : 'unknown',
+                filterDateRange: filters.filterDate, // Pass active date filter down
+                info: "No specific elements found. Check antiBot state or search page."
             });
         }
 
         const globalDate = Parsers.date(pageText);
         const globalTime = Parsers.time(pageText);
-        const filters = Scraper.pageFilters();
 
         const meta = {
             pageType: Enrichment.pageType(),
@@ -352,6 +415,7 @@
             globalStatus: Enrichment.status(pageText),
             globalDate: globalDate,
             globalTime: globalTime,
+            filterLocation: filters.filterLocation, // For discovery page city matching
             ...filters
         };
 
@@ -370,7 +434,7 @@
 
                 results.push({
                     ...item,
-                    ...meta,
+                    ...meta, // Spread global filters into the output dict
                     date: finalDate,
                     parsedTime: Parsers.time(finalTime || ''),
                     availabilityStatus: item.availabilityStatus || meta.globalStatus,

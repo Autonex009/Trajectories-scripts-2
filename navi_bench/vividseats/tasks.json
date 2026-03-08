@@ -65,7 +65,7 @@
   },
   {
     "task_id": "vividseats/concerts/bts/bowl_1_specific",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check the Vivid Seats listings for BTS in El Paso. Check specifically for tickets in Section Bowl 1.\", \"queries\": [[{\"event_names\": [\"bts\"], \"sections\": [\"bowl 1\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Denver\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check the Vivid Seats listings for BTS in El Paso. Check specifically for tickets in Section Bowl 1.\", \"queries\": [[{\"event_names\": [\"bts\", \"sun bowl stadium\"], \"cities\": [\"el paso\"], \"sections\": [\"bowl 1\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Denver\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -73,7 +73,7 @@
   },
   {
     "task_id": "vividseats/concerts/bts/bowl_12_super_seller",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Find Bowl 12 for the BTS concert in El Paso, but it must be sold by a Super Seller.\", \"queries\": [[{\"event_names\": [\"bts\"], \"sections\": [\"bowl 12\"], \"require_super_seller\": true, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Denver\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Find Bowl 12 for the BTS concert in El Paso, but it must be sold by a Super Seller.\", \"queries\": [[{\"event_names\": [\"bts\", \"sun bowl stadium\"], \"cities\": [\"el paso\"], \"sections\": [\"bowl 12\"], \"require_super_seller\": true, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Denver\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -81,7 +81,7 @@
   },
   {
     "task_id": "vividseats/concerts/bts/bowl_19_check",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"My friends are sitting in Bowl 19 for the BTS concert in El Paso. Check if there are any tickets left in that section.\", \"queries\": [[{\"event_names\": [\"bts\"], \"sections\": [\"bowl 19\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Denver\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"My friends are sitting in Bowl 19 for the BTS concert in El Paso. Check if there are any tickets left in that section.\", \"queries\": [[{\"event_names\": [\"bts\", \"sun bowl stadium\"], \"cities\": [\"el paso\"], \"sections\": [\"bowl 19\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Denver\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -89,7 +89,7 @@
   },
   {
     "task_id": "vividseats/concerts/bts/bowl_26_general",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check the Vivid Seats listing for BTS in El Paso to know if I can get a ticket in Bowl 26 for under $215.\", \"queries\": [[{\"event_names\": [\"bts\"], \"sections\": [\"bowl 26\"], \"max_price\": 215.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Denver\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check the Vivid Seats listing for BTS in El Paso to know if I can get a ticket in Bowl 26 for under $215.\", \"queries\": [[{\"event_names\": [\"bts\", \"sun bowl stadium\"], \"cities\": [\"el paso\"], \"sections\": [\"bowl 26\"], \"max_price\": 215.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Denver\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -121,7 +121,7 @@
   },
   {
     "task_id": "vividseats/concerts/the_weeknd/section_327_specific",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check the Vivid Seats listings for The Weeknd in Munich. Look out for tickets psecifically in Section 327.\", \"queries\": [[{\"event_names\": [\"the weeknd\"], \"sections\": [\"section 327\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"Europe/Berlin\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check the Vivid Seats listings for The Weeknd in Munich. Look out for tickets specifically in Section 327.\", \"queries\": [[{\"event_names\": [\"the weeknd\", \"allianz arena\"], \"cities\": [\"munich\"], \"sections\": [\"section 327\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"Europe/Berlin\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -137,7 +137,7 @@
   },
   {
     "task_id": "vividseats/concerts/the_weeknd/zone_budget_combo",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Look for The Weeknd tickets in Munich. Ensure the tickets cost less than $250 and are in the 300 Level zone.\", \"queries\": [[{\"event_names\": [\"the weeknd\"], \"zones\": [\"300 level\"], \"max_price\": 250.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"Europe/Berlin\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Look for The Weeknd tickets in Munich. Ensure the tickets cost less than $250 and are in the 300 Level zone.\", \"queries\": [[{\"event_names\": [\"the weeknd\", \"allianz arena\"], \"cities\": [\"munich\"], \"zones\": [\"300 level\"], \"max_price\": 250.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"Europe/Berlin\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -153,7 +153,7 @@
   },
   {
     "task_id": "vividseats/concerts/the_weeknd/specific_row_check",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Look for tickets in Section 317, Row 12 for The Weeknd in Munich. Check if there is anything available.\", \"queries\": [[{\"event_names\": [\"the weeknd\"], \"sections\": [\"section 317\"], \"rows\": [\"12\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"Europe/Berlin\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Look for tickets in Section 317, Row 12 for The Weeknd in Munich. Check if there is anything available.\", \"queries\": [[{\"event_names\": [\"the weeknd\", \"allianz arena\"], \"cities\": [\"munich\"], \"sections\": [\"section 317\"], \"rows\": [\"12\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"Europe/Berlin\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -169,7 +169,7 @@
   },
   {
     "task_id": "vividseats/concerts/the_weeknd/mid_tier_pricing",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check the availability for tickets of The Weeknd concert in Munich in Sections 308, 309, or 322. I want to spend less than $775.\", \"queries\": [[{\"event_names\": [\"the weeknd\"], \"sections\": [\"section 308\", \"section 309\", \"section 322\"], \"max_price\": 775.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"Europe/Berlin\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check the availability for tickets of The Weeknd concert in Munich in Sections 308, 309, or 322. I want to spend less than $775.\", \"queries\": [[{\"event_names\": [\"the weeknd\", \"allianz arena\"], \"cities\": [\"munich\"], \"sections\": [\"section 308\", \"section 309\", \"section 322\"], \"max_price\": 775.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"Europe/Berlin\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -216,8 +216,8 @@
     "l2_category": "concerts"
   },
   {
-    "task_id": "vividseats/concerts/lady_gaga/multi_section_search",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"For the Lady Gaga show in NYC, check if there are 6 tickets available in either Section 109 or Section 120.\", \"queries\": [[{\"event_names\": [\"lady gaga\"], \"cities\": [\"new york\"], \"sections\": [\"section 109\", \"section 120\"], \"quantity\": 6, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/New_York\"}",
+    "task_id": "vividseats/concerts/the_weeknd/multi_section_choice",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"For The Weeknd's show in Munich, check if tickets are available in either Section 310 or Section 320.\", \"queries\": [[{\"event_names\": [\"the weeknd\", \"allianz arena\"], \"cities\": [\"munich\"], \"sections\": [\"section 310\", \"section 320\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"Europe/Berlin\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -257,7 +257,7 @@
   },
   {
     "task_id": "vividseats/concerts/lewis_capaldi/zone_filter_promenade",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Find 3 tickets for Lewis Capaldi in Los Angeles. Strictly look at 'Promenade 1' or 'Promenade 2' seats.\", \"queries\": [[{\"event_names\": [\"lewis capaldi\"], \"zones\": [\"promenade 1\", \"promenade 2\"], \"quantity\": 3, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Find 3 tickets for Lewis Capaldi in Los Angeles. Strictly look at 'Promenade 1' or 'Promenade 2' seats.\", \"queries\": [[{\"event_names\": [\"lewis capaldi\", \"hollywood bowl\"], \"cities\": [\"los angeles\"], \"zones\": [\"promenade 1\", \"promenade 2\"], \"quantity\": 3, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -281,7 +281,7 @@
   },
   {
     "task_id": "vividseats/concerts/lewis_capaldi/row_19_exact",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check the Vivid Seats listings for Lewis Capaldi in Los Angeles. I specifically want 3 tickets in Row 19.\", \"queries\": [[{\"event_names\": [\"lewis capaldi\"], \"rows\": [\"19\"], \"quantity\": 3, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check the Vivid Seats listings for Lewis Capaldi in Los Angeles. I specifically want 3 tickets in Row 19.\", \"queries\": [[{\"event_names\": [\"lewis capaldi\", \"hollywood bowl\"], \"cities\": [\"los angeles\"], \"rows\": [\"19\"], \"quantity\": 3, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -297,7 +297,7 @@
   },
   {
     "task_id": "vividseats/concerts/lewis_capaldi/f3_section_check",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check if there are 3 tickets available in Promenade F3 for the Lewis Capaldi show in LA.\", \"queries\": [[{\"event_names\": [\"lewis capaldi\"], \"sections\": [\"promenade f3\"], \"quantity\": 3, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check if there are 3 tickets available in Promenade F3 for the Lewis Capaldi show in LA.\", \"queries\": [[{\"event_names\": [\"lewis capaldi\", \"hollywood bowl\"], \"cities\": [\"los angeles\"], \"sections\": [\"promenade f3\"], \"quantity\": 3, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -305,7 +305,7 @@
   },
   {
     "task_id": "vividseats/concerts/lewis_capaldi/super_seller_row_21",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I need 3 tickets in Row 21 for Lewis Capaldi in Los Angeles, but I will only buy them if they are from a Super Seller. Check for any such availablity.\", \"queries\": [[{\"event_names\": [\"lewis capaldi\"], \"rows\": [\"21\"], \"quantity\": 3, \"require_super_seller\": true, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I need 3 tickets in Row 21 for Lewis Capaldi in Los Angeles, but I will only buy them if they are from a Super Seller. Check for any such availablity.\", \"queries\": [[{\"event_names\": [\"lewis capaldi\", \"hollywood bowl\"], \"cities\": [\"los angeles\"], \"rows\": [\"21\"], \"quantity\": 3, \"require_super_seller\": true, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -321,7 +321,7 @@
   },
   {
     "task_id": "vividseats/concerts/lewis_capaldi/f1_or_k1_standard",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I want to compare prices for 3 tickets in either Promenade F1 or Promenade K1 for Lewis Capaldi in Los Angeles.\", \"queries\": [[{\"event_names\": [\"lewis capaldi\"], \"sections\": [\"promenade f1\", \"promenade k1\"], \"quantity\": 3, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I want to compare prices for 3 tickets in either Promenade F1 or Promenade K1 for Lewis Capaldi in Los Angeles.\", \"queries\": [[{\"event_names\": [\"lewis capaldi\", \"hollywood bowl\"], \"cities\": [\"los angeles\"], \"sections\": [\"promenade f1\", \"promenade k1\"], \"quantity\": 3, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -329,7 +329,7 @@
   },
   {
     "task_id": "vividseats/sports/lakers/bulls_home",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Search for tickets to the Los Angeles Lakers vs Chicago Bulls game in LA on March 12, 2026.\", \"queries\": [[{\"event_names\": [\"lakers\", \"bulls\"], \"cities\": [\"los angeles\"], \"dates\": [\"2026-03-12\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Search for tickets to the Los Angeles Lakers vs Chicago Bulls game in LA in the upcoming month.\", \"queries\": [[{\"event_names\": [\"lakers\", \"bulls\"], \"cities\": [\"los angeles\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -337,7 +337,7 @@
   },
   {
     "task_id": "vividseats/sports/lakers/miami_away",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I want to see the Lakers play on the road against the Miami Heat on March 19, 2026. Check if there are tickets available.\", \"queries\": [[{\"event_names\": [\"lakers\", \"heat\"], \"cities\": [\"miami\"], \"dates\": [\"2026-03-19\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/New_York\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I want to see the Lakers play on the road against the Miami Heat over {dateRange}. Check if there are tickets available.\", \"queries\": [[{\"event_names\": [\"lakers\", \"heat\"], \"cities\": [\"miami\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/New_York\", \"values\": {\"dateRange\": \"the next weekend\"}}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -345,7 +345,7 @@
   },
   {
     "task_id": "vividseats/sports/lakers/houston_multi_date",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"The Lakers are playing two games in Houston in mid-March 2026. Find available tickets for either the March 16 or March 18 game.\", \"queries\": [[{\"event_names\": [\"lakers\", \"rockets\"], \"cities\": [\"houston\"], \"dates\": [\"2026-03-16\", \"2026-03-18\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Chicago\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"The Lakers are playing two games in Houston in mid-March 2026. Find available tickets in {dateRange}.\", \"queries\": [[{\"event_names\": [\"lakers\"], \"cities\": [\"houston\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Chicago\", \"values\": {\"dateRange\": \"the mid week of this month\"}}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -417,7 +417,15 @@
   },
   {
     "task_id": "vividseats/theater/beauty_and_the_beast/late_april",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Search for Beauty and the Beast tickets between April 21 to April 29 to check for general availability.\", \"queries\": [[{\"event_names\": [\"beauty and the beast\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/New_York\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Search for Beauty and the Beast tickets over the upcoming weekend to check for general availability.\", \"queries\": [[{\"event_names\": [\"beauty and the beast\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/New_York\"}",
+    "env": "real",
+    "domain": "vividseats",
+    "l1_category": "entertainment",
+    "l2_category": "theater"
+  },
+  {
+    "task_id": "vividseats/theater/beauty_and_the_beast/april_late",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Search for Beauty and the Beast tickets over {dateRange} to check for general availability.\", \"queries\": [[{\"event_names\": [\"beauty and the beast\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/New_York\", \"values\": {\"dateRange\": \"the weekends of next month\"}}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -425,7 +433,7 @@
   },
   {
     "task_id": "vividseats/theater/beauty_and_the_beast/apr_21_budget",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Search for tickets to see the Beauty and the Beast musical on April 21, 2026.\", \"queries\": [[{\"event_names\": [\"beauty and the beast\"], \"dates\": [\"2026-04-21\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/New_York\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Search for tickets to see the Beauty and the Beast musical on {dateRange}.\", \"queries\": [[{\"event_names\": [\"beauty and the beast\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/New_York\", \"values\": {\"dateRange\": \"the Mondays of next month\"}}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -433,7 +441,7 @@
   },
   {
     "task_id": "vividseats/theater/beauty_and_the_beast/apr_25_general",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check Vivid Seats to see if there are any tickets available for Beauty and the Beast on April 25, 2026.\", \"queries\": [[{\"event_names\": [\"beauty and the beast\"], \"dates\": [\"2026-04-25\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/New_York\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check Vivid Seats to see if there are any tickets available for Beauty and the Beast on {dateRange}.\", \"queries\": [[{\"event_names\": [\"beauty and the beast\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/New_York\", \"values\": {\"dateRange\": \"the Saturdays of next month\"}}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -441,7 +449,7 @@
   },
   {
     "task_id": "vividseats/theater/beauty_and_the_beast/apr_28_deal",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I want to catch the Beauty and the Beast show on April 28, 2026.\", \"queries\": [[{\"event_names\": [\"beauty and the beast\"], \"dates\": [\"2026-04-28\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/New_York\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I want to catch the Beauty and the Beast show on {dateRange}.\", \"queries\": [[{\"event_names\": [\"beauty and the beast\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/New_York\", \"values\": {\"dateRange\": \"the last week of next month\"}}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -449,7 +457,7 @@
   },
   {
     "task_id": "vividseats/comedy/gabriel_iglesias/dallas_cheap",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Find a single ticket available for Gabriel Iglesias at the Improv Comedy Club in Dallas on April 17. Ensure the ticket price is at least $120.\", \"queries\": [[{\"event_names\": [\"gabriel iglesias\"], \"cities\": [\"dallas\"], \"dates\": [\"2026-04-17\"], \"quantity\": 1, \"min_price\": 120.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Chicago\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Find a single ticket available for Gabriel Iglesias at the Improv Comedy Club in Dallas on {dateRange}. Ensure the ticket price is at least $120.\", \"queries\": [[{\"event_names\": [\"gabriel iglesias\"], \"cities\": [\"dallas\"], \"quantity\": 1, \"min_price\": 120.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Chicago\", {\"dateRange\": \"the Sundays of next month\"}}}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -457,7 +465,7 @@
   },
   {
     "task_id": "vividseats/comedy/gabriel_iglesias/ga_row_4",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I want to see Gabriel Iglesias in Dallas. Please find me a single ticket specifically in 'Row 4' of the General Admission section.\", \"queries\": [[{\"event_names\": [\"gabriel iglesias\"], \"sections\": [\"general admission\"], \"rows\": [\"4\"], \"quantity\": 1, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Chicago\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I want to see Gabriel Iglesias in Dallas. Please find me a single ticket specifically in 'Row 4' of the General Admission section.\", \"queries\": [[{\"event_names\": [\"gabriel iglesias\"], \"cities\": [\"dallas\"], \"sections\": [\"general admission\"], \"rows\": [\"4\"], \"quantity\": 1, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Chicago\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -465,7 +473,7 @@
   },
   {
     "task_id": "vividseats/comedy/gabriel_iglesias/dallas_mid_range",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Search for Gabriel Iglesias tickets in Dallas. I'm looking for a mid-range seat, so find me a ticket that costs at least $150 but no more than $180.\", \"queries\": [[{\"event_names\": [\"gabriel iglesias\"], \"quantity\": 1, \"min_price\": 150.0, \"max_price\": 180.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Chicago\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Search for Gabriel Iglesias tickets in Dallas. I'm looking for a mid-range seat, so find me a ticket that costs at least $150 but no more than $180.\", \"queries\": [[{\"event_names\": [\"gabriel iglesias\"], \"cities\": [\"dallas\"], \"quantity\": 1, \"min_price\": 150.0, \"max_price\": 180.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Chicago\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -473,7 +481,7 @@
   },
   {
     "task_id": "vividseats/comedy/gabriel_iglesias/apr_17_general",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check Vivid Seats to see if there are any tickets available for Gabriel Iglesias on April 17, 2026, in Dallas.\", \"queries\": [[{\"event_names\": [\"gabriel iglesias\"], \"dates\": [\"2026-04-17\"], \"quantity\": 1, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Chicago\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check Vivid Seats to see if there are any tickets available for Gabriel Iglesias in Dallas on {dateRange}.\", \"queries\": [[{\"event_names\": [\"gabriel iglesias\"], \"quantity\": 1, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Chicago\", \"values\": {\"dateRange\": \"the third Friday of next month\"}}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -489,23 +497,7 @@
   },
   {
     "task_id": "vividseats/theater/les_miserables/boise_group_budget",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I need to find 8 tickets together for Les Misérables at the Morrison Center in Boise on April 21, 2026 strictly under $150 per ticket.\", \"queries\": [[{\"event_names\": [\"les miserables\"], \"cities\": [\"boise\"], \"dates\": [\"2026-04-21\"], \"quantity\": 8, \"max_price\": 150.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Boise\"}",
-    "env": "real",
-    "domain": "vividseats",
-    "l1_category": "entertainment",
-    "l2_category": "theater"
-  },
-  {
-    "task_id": "vividseats/theater/les_miserables/main_floor_super_seller",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Search for Les Misérables tickets in Boise. I specifically want to sit on the 'Main Floor' and I only want to buy from a 'Super Seller'. Find me 8 tickets matching this description.\", \"queries\": [[{\"event_names\": [\"les miserables\"], \"zones\": [\"main floor\"], \"quantity\": 8, \"require_super_seller\": true, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Boise\"}",
-    "env": "real",
-    "domain": "vividseats",
-    "l1_category": "entertainment",
-    "l2_category": "theater"
-  },
-  {
-    "task_id": "vividseats/theater/les_miserables/row_r_or_s_check",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check the availability for Les Misérables at the Morrison Center. Search for a group of 8 tickets specifically in 'Row R' or 'Row S'.\", \"queries\": [[{\"event_names\": [\"les miserables\"], \"rows\": [\"r\", \"s\"], \"quantity\": 8, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Boise\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I need to find 8 tickets together for Les Misérables at the Morrison Center in Boise on {dateRange} strictly under $150 per ticket.\", \"queries\": [[{\"event_names\": [\"les miserables\"], \"cities\": [\"boise\"], \"quantity\": 8, \"max_price\": 150.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Boise\", \"values\": {\"dateRange\": \"the third Tuesday of next month\"}}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -513,7 +505,23 @@
   },
   {
     "task_id": "vividseats/theater/les_miserables/boise_mid_range",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Find me 8 tickets for Les Misérables in Boise. I want to spend at least $140 but not more than $200 per ticket.\", \"queries\": [[{\"event_names\": [\"les miserables\"], \"min_price\": 140.0, \"max_price\": 200.0, \"quantity\": 8, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Boise\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Find me 8 tickets for Les Misérables in Boise. I want to spend at least $140 but not more than $200 per ticket.\", \"queries\": [[{\"event_names\": [\"les miserables\", \"morrison center\"], \"cities\": [\"boise\"], \"min_price\": 140.0, \"max_price\": 200.0, \"quantity\": 8, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Boise\"}",
+    "env": "real",
+    "domain": "vividseats",
+    "l1_category": "entertainment",
+    "l2_category": "theater"
+  },
+  {
+    "task_id": "vividseats/theater/les_miserables/row_r_or_s_check",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check the availability for Les Misérables at the Morrison Center. Search for a group of 8 tickets specifically in 'Row R' or 'Row S'.\", \"queries\": [[{\"event_names\": [\"les miserables\", \"morrison center\"], \"cities\": [\"boise\"], \"rows\": [\"r\", \"s\"], \"quantity\": 8, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Boise\"}",
+    "env": "real",
+    "domain": "vividseats",
+    "l1_category": "entertainment",
+    "l2_category": "theater"
+  },
+  {
+    "task_id": "vividseats/theater/les_miserables/main_floor_super_seller",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Search for Les Misérables tickets in Boise. I specifically want to sit on the 'Main Floor' and I only want to buy from a 'Super Seller'. Find me 8 tickets matching this description.\", \"queries\": [[{\"event_names\": [\"les miserables\", \"morrison center\"], \"cities\": [\"boise\"], \"zones\": [\"main floor\"], \"quantity\": 8, \"require_super_seller\": true, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Boise\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -521,7 +529,7 @@
   },
   {
     "task_id": "vividseats/sports/houston_rodeo/suites_zone_filter",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Search for tickets to the Houston Rodeo (Forrest Frank) at NRG Stadium. Use the zone filter to specifically show 'Suites' and find 4 tickets.\", \"queries\": [[{\"event_names\": [\"houston rodeo\", \"forrest frank\"], \"quantity\": 4, \"zones\": [\"suites\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Chicago\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Search for tickets to the Houston Rodeo (Forrest Frank) at NRG Stadium. Use the zone filter to specifically show 'Suites' and find 4 tickets.\", \"queries\": [[{\"event_names\": [\"houston rodeo\", \"forrest frank\", \"nrg stadium\"], \"quantity\": 4, \"zones\": [\"suites\"], \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Chicago\"}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -529,7 +537,7 @@
   },
   {
     "task_id": "vividseats/sports/houston_rodeo/budget_under_125",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I'm looking for 4 tickets to the Houston Rodeo on March 8 priced strictly below $125 per ticket. Please find available options.\", \"queries\": [[{\"event_names\": [\"houston rodeo\"], \"dates\": [\"2026-03-08\"], \"quantity\": 4, \"max_price\": 125.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Chicago\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I'm looking for 4 tickets to the Houston Rodeo on {dateRange} priced strictly below $125 per ticket. Please find available options.\", \"queries\": [[{\"event_names\": [\"houston rodeo\"], \"quantity\": 4, \"max_price\": 125.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Chicago\", \"values\": {\"dateRange\": \"the second Sunday of this month\"}}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -545,7 +553,7 @@
   },
   {
     "task_id": "vividseats/comedy/matt_rife/netflix_joke_fest_budget",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I want to see Matt Rife at the Netflix Is A Joke Fest in Los Angeles. Find me a single ticket for the May 7th show that costs less than $250.\", \"queries\": [[{\"event_names\": [\"matt rife\", \"netflix is a joke\"], \"cities\": [\"los angeles\"], \"dates\": [\"2026-05-07\"], \"quantity\": 1, \"max_price\": 250.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\"}",
+    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"I want to see Matt Rife at the Netflix Is A Joke Fest in Los Angeles. Find me a single ticket for the show on {dateRange} that costs less than $250.\", \"queries\": [[{\"event_names\": [\"matt rife\", \"netflix is a joke\"], \"cities\": [\"los angeles\"], \"quantity\": 1, \"max_price\": 250.0, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\", \"values\": {\"dateRange\": \"the second Thursday of May\"}}",
     "env": "real",
     "domain": "vividseats",
     "l1_category": "entertainment",
@@ -560,11 +568,11 @@
     "l2_category": "comedy"
   },
   {
-    "task_id": "vividseats/comedy/matt_rife/comedy_store_min_price",
-    "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check the availability for Matt Rife in Los Angeles. I'm looking for a ticket at The Comedy Store priced between $260 and $300.\", \"queries\": [[{\"event_names\": [\"matt rife\"], \"venues\": [\"the comedy store\"], \"min_price\": 260.0, \"max_price\": 300.0, \"quantity\": 1, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\"}",
-    "env": "real",
-    "domain": "vividseats",
-    "l1_category": "entertainment",
-    "l2_category": "comedy"
+  "task_id": "vividseats/comedy/matt_rife/comedy_store_min_price",
+  "task_generation_config_json": "{\"_target_\": \"navi_bench.vividseats.vividseats_task_generation.generate_task_config_deterministic\", \"mode\": \"any\", \"url\": \"https://www.vividseats.com/\", \"task\": \"Check the availability for Matt Rife in Los Angeles. I'm looking for a ticket at The Comedy Store priced between $260 and $300.\", \"queries\": [[{\"event_names\": [\"matt rife\"], \"cities\": [\"los angeles\"], \"venues\": [\"the comedy store\"], \"min_price\": 260.0, \"max_price\": 300.0, \"quantity\": 1, \"require_available\": true}]], \"location\": \"United States\", \"timezone\": \"America/Los_Angeles\"}",
+  "env": "real",
+  "domain": "vividseats",
+  "l1_category": "entertainment",
+  "l2_category": "comedy"
   }
 ]
