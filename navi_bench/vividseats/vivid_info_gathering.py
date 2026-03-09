@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from navi_bench.base import BaseMetric, BaseTaskConfig, UserMetadata, get_import_path
-from navi_bench.dates import initialize_user_metadata
+from navi_bench.dates import initialize_user_metadata, render_task_statement, initialize_placeholder_map
 
 class SingleCandidateQuery(TypedDict, total=False):
     event_name: str | None
@@ -262,7 +262,22 @@ class VividSeatsInfoGathering(BaseMetric):
 
         return True
 
-def generate_task_config_deterministic(mode: Literal["any", "all"], task: str, queries: list[list[MultiCandidateQuery]], location: str, timezone: str, timestamp: int | None = None, url: str = "https://www.vividseats.com") -> BaseTaskConfig:
+def generate_task_config_deterministic(
+    mode: Literal["any", "all"], 
+    task: str, 
+    queries: list[list[MultiCandidateQuery]], 
+    location: str, 
+    timezone: str, 
+    timestamp: int | None = None, 
+    url: str = "https://www.vividseats.com",
+    values: dict[str, str] | None = None
+) -> BaseTaskConfig:
     user_metadata = initialize_user_metadata(timezone, location, timestamp)
+    
+    if values:
+        placeholder_map = initialize_placeholder_map(user_metadata)
+        placeholder_map.update(values)
+        task = render_task_statement(task, placeholder_map)
+        
     eval_config = {"_target_": get_import_path(VividSeatsInfoGathering), "queries": queries}
     return BaseTaskConfig(url=url, task=task, user_metadata=user_metadata, eval_config=eval_config)
