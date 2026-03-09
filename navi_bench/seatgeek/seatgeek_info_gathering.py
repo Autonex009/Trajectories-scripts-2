@@ -584,10 +584,13 @@ class SeatGeekInfoGathering(BaseMetric):
                 return False
 
         # Check venues using SUBSTRING matching
+        # BUG 2 FIX: If query requires venues, info MUST have a venue to match
         if venues := query.get("venues"):
             venues = [v.lower() for v in venues]
             venue = info.get("venue", "").lower()
-            if venue and not any(v in venue for v in venues):
+            if not venue:
+                return False
+            if not any(v in venue for v in venues):
                 return False
 
         # Check cities using SUBSTRING matching
@@ -607,48 +610,52 @@ class SeatGeekInfoGathering(BaseMetric):
         # ========== TICKET LISTING FILTERS ==========
         
         # Check minimum tickets
-        if min_tickets := query.get("min_tickets"):
-            ticket_count = info.get("ticketCount", 0)
-            if ticket_count and ticket_count < min_tickets:
+        # BUG 3 FIX: Use `is not None` instead of falsy check (ticketCount=0 is valid)
+        if (min_tickets := query.get("min_tickets")) is not None:
+            ticket_count = info.get("ticketCount")
+            if ticket_count is not None and ticket_count < min_tickets:
                 return False
 
         # Check maximum tickets
-        if max_tickets := query.get("max_tickets"):
-            ticket_count = info.get("ticketCount", 0)
-            if ticket_count and ticket_count > max_tickets:
+        if (max_tickets := query.get("max_tickets")) is not None:
+            ticket_count = info.get("ticketCount")
+            if ticket_count is not None and ticket_count > max_tickets:
                 return False
 
         # Check exact ticket quantities
         if ticket_quantities := query.get("ticket_quantities"):
-            ticket_count = info.get("ticketCount", 0)
-            if ticket_count and ticket_count not in ticket_quantities:
+            ticket_count = info.get("ticketCount")
+            if ticket_count is not None and ticket_count not in ticket_quantities:
                 return False
 
         # Check maximum price — using cascading fallback:
         # LD+JSON lowPrice → DOM listing low → individual listing price
-        if max_price := query.get("max_price"):
+        # BUG 4 FIX: Use `is not None` to handle max_price=0.0 edge case
+        if (max_price := query.get("max_price")) is not None:
             low_price = info.get("lowPrice")
             listing_low = info.get("listingLowPrice")
             price = info.get("price")
             
-            cheapest = low_price or listing_low or price
+            # Pick first non-None price in fallback chain
+            cheapest = low_price if low_price is not None else (listing_low if listing_low is not None else price)
             if cheapest is not None and cheapest > max_price:
                 return False
 
         # Check minimum price
-        if min_price := query.get("min_price"):
-            price = info.get("price") or info.get("lowPrice")
+        if (min_price := query.get("min_price")) is not None:
+            price = info.get("price") if info.get("price") is not None else info.get("lowPrice")
             if price is not None and price < min_price:
                 return False
 
-        # Check sections using SUBSTRING matching
+        # Check sections using EXACT matching
+        # BUG 11 FIX: Use exact equality to prevent section "1" matching "11"
         if sections := query.get("sections"):
             sections = [s.lower() for s in sections]
             section = info.get("section", "").lower()
             available_sections = [s.lower() for s in info.get("availableSections", [])]
             all_sections = [section] + available_sections
             
-            if not any(s in sec for s in sections for sec in all_sections if sec):
+            if not any(s == sec for s in sections for sec in all_sections if sec):
                 return False
 
         # Check rows using EXACT matching (row "1" must not match "15")
@@ -711,15 +718,16 @@ class SeatGeekInfoGathering(BaseMetric):
         # ========== URL-BASED VERIFICATION ==========
         
         # Check URL quantity
-        if url_quantity := query.get("url_quantity"):
+        # BUG 4 FIX: Use `is not None` to handle url_quantity=0 edge case
+        if (url_quantity := query.get("url_quantity")) is not None:
             info_url_quantity = info.get("urlQuantity")
-            if info_url_quantity and info_url_quantity != url_quantity:
+            if info_url_quantity is not None and info_url_quantity != url_quantity:
                 return False
         
         # Check URL max price
-        if url_max_price := query.get("url_max_price"):
+        if (url_max_price := query.get("url_max_price")) is not None:
             info_url_max = info.get("urlMaxPrice")
-            if info_url_max and info_url_max != url_max_price:
+            if info_url_max is not None and info_url_max != url_max_price:
                 return False
 
         # ========== PAGE TYPE REQUIREMENT ==========
@@ -732,11 +740,12 @@ class SeatGeekInfoGathering(BaseMetric):
                     return False
 
         # ========== AVAILABILITY STATUS ==========
-        
+        # BUG 1 FIX: Use exact equality instead of substring to prevent
+        # "available" matching "unavailable"
         if availability_statuses := query.get("availability_statuses"):
             availability_statuses = [s.lower() for s in availability_statuses]
             info_availability = info.get("availabilityStatus", info.get("info", "")).lower()
-            if info_availability and not any(s in info_availability for s in availability_statuses):
+            if info_availability and info_availability not in availability_statuses:
                 return False
 
         # ========== DATE/TIME FILTERS ==========
@@ -910,7 +919,19 @@ def generate_task_config_deterministic(
     timestamp: int | None = None,
     url: str = "https://seatgeek.com",
 ) -> BaseTaskConfig:
-    """Generate deterministic task configuration."""
+    """Generate deterministic task configuration.
+    
+    Args:
+        mode: Task mode ("any" or "all"). Currently accepted for API
+              compatibility but not used for query expansion. All queries
+              are passed through unchanged.
+        task: Task description string.
+        queries: List of query alternatives.
+        location: User location string.
+        timezone: IANA timezone string.
+        timestamp: Optional unix timestamp.
+        url: Starting URL.
+    """
     user_metadata = initialize_user_metadata(timezone, location, timestamp)
     
     eval_config = {
@@ -942,7 +963,7 @@ if __name__ == "__main__":
         }),
         "env": "real",
         "domain": "seatgeek",
-        "l1_category": "entertainment",
+        "l1_category": "e_commerce",
         "l2_category": "sports",
     }
 

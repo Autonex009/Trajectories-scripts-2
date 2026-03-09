@@ -47,15 +47,7 @@
         return getAttr(`meta[name="${name}"], meta[property="${name}"]`, 'content') || '';
     }
 
-    /**
-     * Parse a price string like "$321", "$1,500", or "$84 incl. fees" to a float.
-     */
-    function parsePrice(priceStr) {
-        if (!priceStr) return null;
-        const cleaned = priceStr.replace(/[^0-9.]/g, '');
-        const val = parseFloat(cleaned);
-        return isNaN(val) ? null : val;
-    }
+    // NOTE: parsePrice removed — was dead code (BUG 8 FIX).
 
     // ==================== URL PARSING ====================
 
@@ -79,22 +71,25 @@
             // Search page
             if (path === '/search') return 'search';
 
-            // Performer page: /{slug}-tickets (exactly 1 segment ending in -tickets)
-            if (segments.length === 1 && segments[0].endsWith('-tickets')) {
-                return 'performer';
-            }
-
-            // Category pages (known categories)
+            // BUG 6 FIX: Check category pages BEFORE performer pages
+            // because /nba-tickets, /concert-tickets etc. have 1 segment ending
+            // in -tickets but are category pages, not performer pages.
             const knownCategories = [
                 'sports', 'concert', 'theater', 'comedy', 'festival',
                 'nba', 'nfl', 'mlb', 'nhl', 'mls', 'ncaa',
                 'boxing', 'wrestling', 'tennis', 'golf', 'soccer', 'wwe'
             ];
-            if (segments.length === 1) {
+            if (segments.length === 1 && segments[0].endsWith('-tickets')) {
                 const slug = segments[0].replace('-tickets', '');
                 if (knownCategories.some(c => slug.includes(c))) {
                     return 'category';
                 }
+            }
+
+            // Performer page: /{slug}-tickets (1 segment ending in -tickets,
+            // NOT matching a known category)
+            if (segments.length === 1 && segments[0].endsWith('-tickets')) {
+                return 'performer';
             }
 
             // Homepage
@@ -117,11 +112,11 @@
             if (urlObj.searchParams.has('quantity')) {
                 filters.quantity = parseInt(urlObj.searchParams.get('quantity'));
             }
-            if (urlObj.searchParams.has('max_price')) {
-                filters.max_price = parseFloat(urlObj.searchParams.get('max_price'));
+            if (urlObj.searchParams.has('price_max')) {
+                filters.price_max = parseFloat(urlObj.searchParams.get('price_max'));
             }
-            if (urlObj.searchParams.has('min_price')) {
-                filters.min_price = parseFloat(urlObj.searchParams.get('min_price'));
+            if (urlObj.searchParams.has('price_min')) {
+                filters.price_min = parseFloat(urlObj.searchParams.get('price_min'));
             }
             if (urlObj.searchParams.has('city')) {
                 filters.city = urlObj.searchParams.get('city');
@@ -135,8 +130,8 @@
             if (urlObj.searchParams.has('perks')) {
                 filters.perks = urlObj.searchParams.get('perks');
             }
-            if (urlObj.searchParams.has('section')) {
-                filters.section = urlObj.searchParams.get('section');
+            if (urlObj.searchParams.has('sc')) {
+                filters.sc = urlObj.searchParams.get('sc');
             }
 
             return filters;
@@ -474,9 +469,14 @@
             if (qMatch) state.quantity = parseInt(qMatch[1]);
         }
 
-        // All pill buttons (filter controls at top of listings)
-        const pillButtons = document.querySelectorAll('button');
-        pillButtons.forEach(btn => {
+        // BUG 9 FIX: Scope button scan to filter area only
+        // Filter pills live in a scrollable horizontal row near the top of listings.
+        // Use specific selectors to target filter buttons, not ALL page buttons.
+        const filterContainer = document.querySelector('[class*="FilterBar"], [class*="filter-bar"], [data-testid*="filter"]');
+        const filterButtons = filterContainer
+            ? filterContainer.querySelectorAll('button')
+            : document.querySelectorAll('button[aria-label*="filter"], button[aria-label*="Filter"], button[aria-label*="delivery"], button[aria-label*="perk"]');
+        filterButtons.forEach(btn => {
             const text = (btn.textContent || '').trim().toLowerCase();
             // Detect if "Instant delivery" filter is active
             if (text.includes('instant del') || text.includes('instant delivery')) {
@@ -565,13 +565,13 @@
             ogUrl: getMeta('og:url'),
             eventId: eventId,
             category: category,
-            urlQuantity: urlFilters.quantity || null,
-            urlMaxPrice: urlFilters.max_price || null,
-            urlMinPrice: urlFilters.min_price || null,
-            urlCity: urlFilters.city || null,
-            urlSearch: urlFilters.search || null,
-            urlPerks: urlFilters.perks || null,
-            urlSection: urlFilters.section || null,
+            urlQuantity: urlFilters.quantity ?? null,
+            urlMaxPrice: urlFilters.price_max ?? null,
+            urlMinPrice: urlFilters.price_min ?? null,
+            urlCity: urlFilters.city ?? null,
+            urlSearch: urlFilters.search ?? null,
+            urlPerks: urlFilters.perks ?? null,
+            urlSection: urlFilters.sc ?? null,
             source: 'seatgeek'
         };
 
