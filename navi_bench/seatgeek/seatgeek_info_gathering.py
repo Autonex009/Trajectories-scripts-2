@@ -646,9 +646,13 @@ class SeatGeekInfoGathering(BaseMetric):
                 return False
 
         # Check minimum price
+        # P-6 FIX: Use same fallback chain as max_price: lowPrice → listingLowPrice → price
         if (min_price := query.get("min_price")) is not None:
-            price = info.get("price") if info.get("price") is not None else info.get("lowPrice")
-            if price is not None and price < min_price:
+            low_price = info.get("lowPrice")
+            listing_low = info.get("listingLowPrice")
+            price = info.get("price")
+            cheapest = low_price if low_price is not None else (listing_low if listing_low is not None else price)
+            if cheapest is not None and cheapest < min_price:
                 return False
 
         # Check sections using EXACT matching
