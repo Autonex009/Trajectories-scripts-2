@@ -3,6 +3,7 @@
 import functools
 import itertools
 import asyncio
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -12,7 +13,7 @@ from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from navi_bench.base import BaseMetric, BaseTaskConfig, UserMetadata, get_import_path
-from navi_bench.dates import initialize_user_metadata, render_task_statement, initialize_placeholder_map
+from navi_bench.dates import initialize_user_metadata
 
 class SingleCandidateQuery(TypedDict, total=False):
     event_name: str | None
@@ -240,35 +241,39 @@ class VividSeatsInfoGathering(BaseMetric):
             city_data = (info.get("city") or "").lower()
             if not any(c.lower() in city_data for c in q_cities): return False
 
-        # Venues [FIXED]
+        # Venues
         if q_venues := query.get("venues"):
             venue_data = (info.get("venue") or "").lower()
             if not venue_data or not any(v.lower() in venue_data for v in q_venues): return False
 
-        # Quantity [FIXED]
+        # Quantity
         if q_qty := query.get("quantity"):
             # Evaluates against scraped individual ticket count or the global page filter
             info_qty = info.get("ticketCount") or info.get("filterQuantity")
             if info_qty is None or info_qty < q_qty: return False
 
-        # Min Price [FIXED] (Includes check for Falsy 0.0 values)
+        # Min Price (Includes check for Falsy 0.0 values)
         if "min_price" in query and query["min_price"] is not None:
             min_price = query["min_price"]
             eval_min_price = info.get("price") or info.get("filterMinPrice")
             if eval_min_price is None or eval_min_price < min_price: return False
 
-        # Max Price [FIXED] (Includes check for Falsy 0.0 values)
+        # Max Price (Includes check for Falsy 0.0 values)
         if "max_price" in query and query["max_price"] is not None:
             max_price = query["max_price"]
             eval_max_price = info.get("price") or info.get("filterMaxPrice")
             if eval_max_price is None or eval_max_price > max_price: return False
                 
-        # Sections
+        # Sections (Normalized prefix stripping)
         if q_sections := query.get("sections"):
             info_sec = (info.get("section") or "").lower()
-            if not info_sec or not any(s.lower() in info_sec for s in q_sections): return False
+            normalized_info_sec = re.sub(r'^(section|sec)\s*', '', info_sec.strip())
+            normalized_queries = [re.sub(r'^(section|sec)\s*', '', s.strip().lower()) for s in q_sections]
+            
+            if not info_sec or not any(q in normalized_info_sec for q in normalized_queries):
+                return False
 
-        # Rows [FIXED]
+        # Rows
         if q_rows := query.get("rows"):
             row_data = (info.get("row") or "").lower()
             if not row_data or not any(r.lower() in row_data for r in q_rows): return False
@@ -300,15 +305,14 @@ def generate_task_config_deterministic(
     location: str, 
     timezone: str, 
     timestamp: int | None = None, 
-    url: str = "https://www.vividseats.com",
+    url: str = "https://www.vividseats.com/",
     values: dict[str, str] | None = None
 ) -> BaseTaskConfig:
     user_metadata = initialize_user_metadata(timezone, location, timestamp)
     
+    # Check if 'values' exists and perform a direct formatting substitution
     if values:
-        placeholder_map = initialize_placeholder_map(user_metadata)
-        placeholder_map.update(values)
-        task = render_task_statement(task, placeholder_map)
+        task = task.format(**values)
         
     eval_config = {"_target_": get_import_path(VividSeatsInfoGathering), "queries": queries}
     return BaseTaskConfig(url=url, task=task, user_metadata=user_metadata, eval_config=eval_config)
