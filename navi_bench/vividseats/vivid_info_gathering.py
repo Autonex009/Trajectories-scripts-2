@@ -45,6 +45,7 @@ class InfoDict(TypedDict, total=False):
     section: str
     row: str
     price: float
+    ticketCount: int
     isSuperSeller: bool
     availabilityStatus: str
     pageType: str
@@ -135,12 +136,12 @@ class VividSeatsInfoGathering(BaseMetric):
         infos = unique_infos
 
         # =====================================================================
-        # NEW: REAL-TIME PRINTING
+        # REAL-TIME PRINTING
         # =====================================================================
         if infos:
             print(f"\n[SCRAPED DATA FROM: {page.url[:60]}...]", flush=True)
             
-            # --- NEW: Print Active Filters ---
+            # --- Print Active Filters ---
             first_info = infos[0]
             qty = first_info.get("filterQuantity")
             min_p = first_info.get("filterMinPrice")
@@ -230,33 +231,63 @@ class VividSeatsInfoGathering(BaseMetric):
 
     @classmethod
     def _check_multi_candidate_query(cls, query: MultiCandidateQuery, info: InfoDict) -> bool:
+        # Event Names
         if q_names := query.get("event_names"):
             if not any(q.lower() in info.get("eventName", "").lower() for q in q_names): return False
 
+        # Cities
         if q_cities := query.get("cities"):
             city_data = (info.get("city") or "").lower()
             if not any(c.lower() in city_data for c in q_cities): return False
 
-        if max_price := query.get("max_price"):
+        # Venues [FIXED]
+        if q_venues := query.get("venues"):
+            venue_data = (info.get("venue") or "").lower()
+            if not venue_data or not any(v.lower() in venue_data for v in q_venues): return False
+
+        # Quantity [FIXED]
+        if q_qty := query.get("quantity"):
+            # Evaluates against scraped individual ticket count or the global page filter
+            info_qty = info.get("ticketCount") or info.get("filterQuantity")
+            if info_qty is None or info_qty < q_qty: return False
+
+        # Min Price [FIXED] (Includes check for Falsy 0.0 values)
+        if "min_price" in query and query["min_price"] is not None:
+            min_price = query["min_price"]
+            eval_min_price = info.get("price") or info.get("filterMinPrice")
+            if eval_min_price is None or eval_min_price < min_price: return False
+
+        # Max Price [FIXED] (Includes check for Falsy 0.0 values)
+        if "max_price" in query and query["max_price"] is not None:
+            max_price = query["max_price"]
             eval_max_price = info.get("price") or info.get("filterMaxPrice")
             if eval_max_price is None or eval_max_price > max_price: return False
                 
+        # Sections
         if q_sections := query.get("sections"):
             info_sec = (info.get("section") or "").lower()
             if not info_sec or not any(s.lower() in info_sec for s in q_sections): return False
 
+        # Rows [FIXED]
+        if q_rows := query.get("rows"):
+            row_data = (info.get("row") or "").lower()
+            if not row_data or not any(r.lower() in row_data for r in q_rows): return False
+
+        # Super Seller (Vivid Seats specific)
         if query.get("require_super_seller") is True:
             if not info.get("isSuperSeller", False) and not info.get("filterSuperSeller", False): return False
 
+        # Availability Status
         if require_available := query.get("require_available", False):
             if info.get("availabilityStatus", "available") == "sold_out": return False
 
+        # Dates
         if q_dates := query.get("dates"):
             if info.get("date") not in q_dates: return False
         
+        # Zones
         if q_zones := query.get("zones"):
             info_zones = info.get("filterZones") or []
-            # Fails if no zones are active, or if none of the requested zones match the active ones
             if not info_zones or not any(z.lower() in [iz.lower() for iz in info_zones] for z in q_zones): 
                 return False
 
