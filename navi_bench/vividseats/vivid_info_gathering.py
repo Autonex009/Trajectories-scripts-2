@@ -45,6 +45,7 @@ class InfoDict(TypedDict, total=False):
     city: str
     section: str
     row: str
+    zone: str
     price: float
     ticketCount: int
     isSuperSeller: bool
@@ -290,10 +291,18 @@ class VividSeatsInfoGathering(BaseMetric):
         if q_dates := query.get("dates"):
             if info.get("date") not in q_dates: return False
         
-        # Zones
+        # Zones [FIXED: Checks both per-ticket zone and global filter]
         if q_zones := query.get("zones"):
+            ticket_zone = (info.get("zone") or "").lower()
             info_zones = info.get("filterZones") or []
-            if not info_zones or not any(z.lower() in [iz.lower() for iz in info_zones] for z in q_zones): 
+            
+            # Check if any queried zone matches the individual ticket's zone
+            ticket_zone_matched = any(z.lower() in ticket_zone for z in q_zones)
+            
+            # Check if any queried zone matches the globally active zone filters
+            filter_zone_matched = any(z.lower() in [iz.lower() for iz in info_zones] for z in q_zones)
+            
+            if not (ticket_zone_matched or filter_zone_matched): 
                 return False
 
         return True
