@@ -1,6 +1,6 @@
 """
 Unit tests for SeatGeek verifier - no browser required.
-Run with: pytest navi_bench/seatgeek/test_seatgeek_unit.py -v
+
 
 Tests cover:
 - Verifier initialization, reset, compute
@@ -794,6 +794,165 @@ class TestCombinedFilters:
         assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is True
 
 
-# Run with: pytest navi_bench/seatgeek/test_seatgeek_unit.py -v
+# ==================== SECOND AUDIT REGRESSION TESTS ====================
+
+
+class TestSecondAuditRegressions:
+    """Regression tests for bugs found in the second audit report."""
+
+    # --- P-2: listing_tags bypass when no tag data ---
+
+    def test_listing_tags_bypass_empty_list(self):
+        """P-2: listing_tags should FAIL when listingTags is empty list."""
+        query = {"event_names": ["lakers"], "listing_tags": ["cheapest"]}
+        info = {"eventName": "lakers", "listingTags": [], "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is False
+
+    def test_listing_tags_bypass_missing_key(self):
+        """P-2: listing_tags should FAIL when listingTags key is absent."""
+        query = {"event_names": ["lakers"], "listing_tags": ["cheapest"]}
+        info = {"eventName": "lakers", "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is False
+
+    # --- P-3: ticket_types bypass when no tag data ---
+
+    def test_ticket_types_bypass_empty(self):
+        """P-3: ticket_types should FAIL when no tag data exists."""
+        query = {"event_names": ["lakers"], "ticket_types": ["premium"]}
+        info = {"eventName": "lakers", "listingTags": [], "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is False
+
+    # --- P-4: instant_delivery with empty/missing filterState ---
+
+    def test_instant_delivery_empty_filter_state(self):
+        """P-4: instant_delivery should PASS when filterState is empty (no data)."""
+        query = {"event_names": ["lakers"], "instant_delivery": True}
+        info = {"eventName": "lakers", "filterState": {}, "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is True
+
+    def test_instant_delivery_missing_filter_state(self):
+        """P-4: instant_delivery should PASS when filterState key is absent."""
+        query = {"event_names": ["lakers"], "instant_delivery": True}
+        info = {"eventName": "lakers", "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is True
+
+    def test_instant_delivery_explicit_true(self):
+        """P-4: instant_delivery should PASS when filterState.instantDelivery=True."""
+        query = {"event_names": ["lakers"], "instant_delivery": True}
+        info = {"eventName": "lakers", "filterState": {"instantDelivery": True}, "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is True
+
+    def test_instant_delivery_explicit_false(self):
+        """P-4: instant_delivery should FAIL when filterState.instantDelivery=False."""
+        query = {"event_names": ["lakers"], "instant_delivery": True}
+        info = {"eventName": "lakers", "filterState": {"instantDelivery": False}, "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is False
+
+    # --- P-5: deal_score_min=0 falsy bypass ---
+
+    def test_deal_score_min_zero(self):
+        """P-5: deal_score_min=0 should reject negative deal scores."""
+        query = {"event_names": ["lakers"], "deal_score_min": 0}
+        info = {"eventName": "lakers", "dealScore": -5, "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is False
+
+    def test_deal_score_min_zero_allows_zero(self):
+        """P-5: deal_score_min=0 should allow dealScore=0."""
+        query = {"event_names": ["lakers"], "deal_score_min": 0}
+        info = {"eventName": "lakers", "dealScore": 0, "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is True
+
+    # --- P-6: min_price fallback chain ---
+
+    def test_min_price_listing_low_fallback(self):
+        """P-6: min_price should use listingLowPrice when lowPrice and price absent."""
+        query = {"event_names": ["lakers"], "min_price": 100}
+        info = {"eventName": "lakers", "listingLowPrice": 50, "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is False
+
+    def test_min_price_low_price_fallback(self):
+        """T-5: min_price should use lowPrice fallback."""
+        query = {"event_names": ["lakers"], "min_price": 100}
+        info = {"eventName": "lakers", "lowPrice": 50, "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is False
+
+    def test_min_price_low_price_above_passes(self):
+        """T-5: min_price should pass when lowPrice is above min."""
+        query = {"event_names": ["lakers"], "min_price": 100}
+        info = {"eventName": "lakers", "lowPrice": 150, "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is True
+
+    # --- T-6: accessible_seating with empty/missing urlPerks ---
+
+    def test_accessible_seating_empty_url_perks(self):
+        """T-6: accessible_seating=True should PASS when urlPerks is empty (no data)."""
+        query = {"event_names": ["lakers"], "accessible_seating": True}
+        info = {"eventName": "lakers", "urlPerks": "", "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is True
+
+    def test_accessible_seating_missing_url_perks(self):
+        """T-6: accessible_seating=True should PASS when urlPerks key is absent."""
+        query = {"event_names": ["lakers"], "accessible_seating": True}
+        info = {"eventName": "lakers", "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is True
+
+    def test_accessible_seating_has_accessible(self):
+        """T-6: accessible_seating=True should PASS when urlPerks contains 'accessible'."""
+        query = {"event_names": ["lakers"], "accessible_seating": True}
+        info = {"eventName": "lakers", "urlPerks": "accessible", "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is True
+
+    def test_accessible_seating_wrong_perks(self):
+        """T-6: accessible_seating=True should FAIL when urlPerks has data but no 'accessible'."""
+        query = {"event_names": ["lakers"], "accessible_seating": True}
+        info = {"eventName": "lakers", "urlPerks": "parking", "info": "available"}
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is False
+
+
+class TestNavigationStackBehavior:
+    """T-7: Tests for navigation stack revisit behavior (P-1 fix)."""
+
+    def test_revisited_page_moves_to_end(self):
+        """T-7: Revisiting a page should move it to end of stack, not update in-place."""
+        evaluator = SeatGeekInfoGathering(
+            queries=[[{"event_names": ["lakers"]}]],
+        )
+
+        # Simulate the stack logic from update() — 3 visits: A, B, A again
+        def simulate_visit(url, page_type, infos):
+            base_url = url.split("?")[0]
+            existing_idx = None
+            for idx, entry in enumerate(evaluator._navigation_stack):
+                if entry["base_url"] == base_url and entry["page_type"] == page_type:
+                    existing_idx = idx
+                    break
+            page_entry = {
+                "url": url, "base_url": base_url, "page_type": page_type,
+                "infos": infos, "timestamp": len(evaluator._navigation_stack)
+            }
+            if existing_idx is not None:
+                evaluator._navigation_stack.pop(existing_idx)
+                evaluator._navigation_stack.append(page_entry)
+            else:
+                evaluator._navigation_stack.append(page_entry)
+
+        # Visit Lakers, then Bulls, then Lakers again
+        simulate_visit("https://seatgeek.com/los-angeles-lakers-tickets", "performer",
+                       [{"eventName": "lakers v1"}])
+        simulate_visit("https://seatgeek.com/chicago-bulls-tickets", "performer",
+                       [{"eventName": "bulls"}])
+        simulate_visit("https://seatgeek.com/los-angeles-lakers-tickets", "performer",
+                       [{"eventName": "lakers v2"}])
+
+        # Revisited Lakers should be at END (index -1)
+        stack = evaluator._navigation_stack
+        assert len(stack) == 2, f"Expected 2 pages, got {len(stack)}"
+        assert stack[-1]["base_url"] == "https://seatgeek.com/los-angeles-lakers-tickets"
+        assert stack[-1]["infos"][0]["eventName"] == "lakers v2"
+        # Bulls should be at index 0
+        assert stack[0]["base_url"] == "https://seatgeek.com/chicago-bulls-tickets"
+
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
