@@ -239,7 +239,8 @@
                                 time: item.startDate?.split("T")[1]?.substring(0, 5),
                                 venue: item.location?.name,
                                 city: item.location?.address?.addressLocality?.toLowerCase(),
-                                price: item.offers?.lowPrice ? parseFloat(item.offers.lowPrice) : null,
+                                floorPrice: item.offers?.lowPrice ? parseFloat(item.offers.lowPrice) : null,
+                                price: null, // FIX: Schema floor price is not a specific ticket price
                                 currency: item.offers?.priceCurrency || "USD",
                                 availabilityStatus: item.offers?.availability?.includes("InStock") ? "available" : "sold_out",
                                 url: item.url || url
@@ -429,6 +430,10 @@
         const globalTime = ldJsonItem ? ldJsonItem.time : Parsers.time(headerText);
         const filters = Scraper.pageFilters();
 
+        // FIX: Check if ANY resale tickets are actively displayed in the list
+        const hasResaleListings = Array.from(document.querySelectorAll('li[data-price], #list-view li, div[class*="ticket-card"], [role="listitem"]'))
+            .some(row => /verified resale/i.test(getText(row) || ''));
+
         const meta = {
             pageType: Enrichment.pageType(),
             antiBotStatus: Enrichment.antiBotStatus(),
@@ -436,6 +441,7 @@
             globalStatus: Enrichment.status(pageText),
             globalDate: globalDate,
             globalTime: globalTime,
+            hasResaleListings: hasResaleListings,
             ...filters // Inject the scraped filters here
         };
 
@@ -465,6 +471,8 @@
                 results.push({
                     ...item,
                     ...meta,
+                    // FIX: Prioritize the item's scraped category (LD+JSON) over the URL-based meta category
+                    eventCategory: item.eventCategory || meta.eventCategory,
                     date: finalDate,
                     parsedTime: Parsers.time(finalTime || ''),
                     availabilityStatus: finalStatus,

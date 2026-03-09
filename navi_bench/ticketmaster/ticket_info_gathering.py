@@ -460,7 +460,14 @@ class TicketmasterInfoGathering(BaseMetric):
                 return False
             
         if query.get("exclude_resale") is True:
-            if info.get("isResale", False) or "resale" in (info.get("filterTicketTypes") or []):
+            # 1. Fail if this specific ticket is a resale ticket
+            if info.get("isResale", False):
+                return False
+            # 2. Fail if the resale filter checkbox is explicitly detected as checked
+            if "resale" in [t.lower() for t in (info.get("filterTicketTypes") or [])]:
+                return False
+            # 3. Fail if the agent failed to apply the filter and resale tickets are still visible on the screen
+            if info.get("hasResaleListings", False):
                 return False
 
         # 6. PAGE TYPE & STATUS CONSTRAINTS
@@ -557,10 +564,17 @@ def generate_task_config_deterministic(
     timezone: str,
     timestamp: int | None = None,
     url: str = "https://www.ticketmaster.com",
+    values: dict[str, str] | None = None,  # 1. Accept the 'values' dictionary from the JSON
 ) -> BaseTaskConfig:
+    
+    # 2. If values were provided, inject them into the placeholders in the task prompt
+    if values:
+        task = task.format(**values)
+        
     user_metadata = initialize_user_metadata(timezone, location, timestamp)
     eval_config = {
         "_target_": get_import_path(TicketmasterInfoGathering),
         "queries": queries
     }
+    
     return BaseTaskConfig(url=url, task=task, user_metadata=user_metadata, eval_config=eval_config)
