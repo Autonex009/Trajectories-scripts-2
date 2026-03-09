@@ -434,8 +434,12 @@ class SeatGeekInfoGathering(BaseMetric):
         }
         
         if existing_idx is not None:
-            self._navigation_stack[existing_idx] = page_entry
-            logger.info(f"Page type: {page_type} (updated existing, stack depth: {len(self._navigation_stack)})")
+            # P-1 FIX: Remove old entry and append at end to maintain correct
+            # visit order. In-place update would keep the old index position,
+            # causing reversed() traversal to treat a revisited page as stale.
+            self._navigation_stack.pop(existing_idx)
+            self._navigation_stack.append(page_entry)
+            logger.info(f"Page type: {page_type} (moved to end, stack depth: {len(self._navigation_stack)})")
         else:
             self._navigation_stack.append(page_entry)
             logger.info(f"Page type: {page_type} (new page, stack depth: {len(self._navigation_stack)})")
@@ -681,8 +685,9 @@ class SeatGeekInfoGathering(BaseMetric):
             listing_tags = [t.lower() for t in info.get("listingTags", [])]
             available_tags = [t.lower() for t in info.get("availableTags", [])]
             all_tags = listing_tags + available_tags
-            # If ticket types specified but no tag data, don't block the match
-            if all_tags and not any(t in tag for t in ticket_types for tag in all_tags):
+            # P-3 FIX: Remove `if all_tags` guard — when ticket_types is required
+            # but no tag data exists, the match should FAIL, not silently pass.
+            if not any(t in tag for t in ticket_types for tag in all_tags):
                 return False
 
         # Check accessible seating requirement
@@ -693,26 +698,32 @@ class SeatGeekInfoGathering(BaseMetric):
                 return False
 
         # Check instant delivery requirement
+        # P-4 FIX: Only reject if filterState explicitly has instantDelivery=False.
+        # When filterState is empty/missing (JS couldn't extract it), don't block.
         if query.get("instant_delivery") is True:
-            filter_state = info.get("filterState", {})
-            if isinstance(filter_state, dict) and not filter_state.get("instantDelivery"):
-                return False
+            filter_state = info.get("filterState")
+            if isinstance(filter_state, dict) and "instantDelivery" in filter_state:
+                if not filter_state["instantDelivery"]:
+                    return False
 
         # ========== SEATGEEK-SPECIFIC FILTERS ==========
         
         # Check Deal Score minimum
-        if deal_score_min := query.get("deal_score_min"):
+        # P-5 FIX: Use `is not None` to handle deal_score_min=0 edge case
+        if (deal_score_min := query.get("deal_score_min")) is not None:
             deal_score = info.get("dealScore")
             if deal_score is not None and deal_score < deal_score_min:
                 return False
 
         # Check listing tags
+        # P-2 FIX: Remove `if all_tags` guard — when listing_tags is required
+        # but no tag data exists, the match should FAIL, not silently pass.
         if required_tags := query.get("listing_tags"):
             required_tags = [t.lower() for t in required_tags]
             listing_tags = [t.lower() for t in info.get("listingTags", [])]
             available_tags = [t.lower() for t in info.get("availableTags", [])]
             all_tags = listing_tags + available_tags
-            if all_tags and not any(t in tag for t in required_tags for tag in all_tags):
+            if not any(t in tag for t in required_tags for tag in all_tags):
                 return False
 
         # ========== URL-BASED VERIFICATION ==========

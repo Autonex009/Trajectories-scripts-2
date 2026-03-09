@@ -86,6 +86,16 @@
                 }
             }
 
+            // J-3 FIX: Handle 2-segment city-scoped performer URLs
+            // e.g., /los-angeles-ca/los-angeles-lakers-tickets
+            if (segments.length === 2 && segments[1].endsWith('-tickets')) {
+                const slug = segments[1].replace('-tickets', '');
+                if (knownCategories.some(c => slug.includes(c))) {
+                    return 'category';
+                }
+                return 'performer';
+            }
+
             // Performer page: /{slug}-tickets (1 segment ending in -tickets,
             // NOT matching a known category)
             if (segments.length === 1 && segments[0].endsWith('-tickets')) {
@@ -399,16 +409,37 @@
         const listings = [];
 
         // Method 1: Parse aria-label on listing buttons
+        // J-2 FIX: Also capture GA/Pit/General Admission listings
         const buttons = document.querySelectorAll(
-            'button[aria-label*="Section"], button[aria-label*="section"]'
+            'button[aria-label*="Section"], button[aria-label*="section"], ' +
+            'button[aria-label*="General Admission"], button[aria-label*="GA"], ' +
+            'button[aria-label*="Pit"], button[aria-label*="Floor"]'
         );
         buttons.forEach(btn => {
-            const parsed = parseListingLabel(btn.getAttribute('aria-label'));
+            const label = btn.getAttribute('aria-label');
+            const parsed = parseListingLabel(label);
             if (parsed) {
                 parsed.tags = extractListingTags(btn);
                 parsed.priceWithFees = extractFeeInclusivePrice(btn);
                 parsed.isAisle = parsed.tags.includes('aisle');
                 listings.push(parsed);
+            } else if (label && /\d+\s+tickets?\s+at\s+\$/i.test(label)) {
+                // Fallback for non-standard label formats (GA, Pit, Floor)
+                const priceMatch = label.match(/\$([\d,.]+)/);
+                const qtyMatch = label.match(/(\d+)\s+to\s+(\d+)\s+tickets?/i);
+                if (priceMatch) {
+                    listings.push({
+                        section: label.match(/^([^,]+)/)?.[1]?.trim() || 'GA',
+                        row: 'GA',
+                        minQty: qtyMatch ? parseInt(qtyMatch[1]) : 1,
+                        maxQty: qtyMatch ? parseInt(qtyMatch[2]) : 1,
+                        price: parseFloat(priceMatch[1].replace(/,/g, '')),
+                        dealScore: null,
+                        tags: extractListingTags(btn),
+                        priceWithFees: extractFeeInclusivePrice(btn),
+                        isAisle: false,
+                    });
+                }
             }
         });
 
@@ -448,8 +479,16 @@
      */
     function extractListingCountText() {
         const bodyText = document.body ? document.body.innerText : '';
-        const match = bodyText.match(/(\d+)\s+listings?/i);
-        return match ? parseInt(match[1]) : null;
+        // J-4 FIX: Match ALL occurrences and use the largest number,
+        // because the first match may be a subset (e.g., "Showing 5 listings")
+        const matches = bodyText.match(/(\d+)\s+listings?/gi);
+        if (!matches) return null;
+        let maxCount = 0;
+        matches.forEach(m => {
+            const num = parseInt(m.match(/(\d+)/)[1]);
+            if (num > maxCount) maxCount = num;
+        });
+        return maxCount || null;
     }
 
     // ==================== FILTER STATE EXTRACTION ====================
@@ -705,9 +744,13 @@
                 infos.push({
                     ...commonFields,
                     eventName: teamData.name || '',
+                    // J-1 FIX: Map TheaterGroup/PerformingGroup to 'theater', not 'concerts'
                     eventCategory: teamData['@type'] === 'SportsTeam' ? 'sports' :
-                        teamData['@type'] === 'Person' ? 'concerts' :
-                            'concerts',
+                        teamData['@type'] === 'TheaterGroup' ? 'theater' :
+                            teamData['@type'] === 'PerformingGroup' ? 'theater' :
+                                teamData['@type'] === 'MusicGroup' ? 'concerts' :
+                                    teamData['@type'] === 'Person' ? 'concerts' :
+                                        'concerts',
                     totalListings: events.length,
                     source: 'ld+json_performer'
                 });
