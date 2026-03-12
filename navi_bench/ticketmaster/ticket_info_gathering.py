@@ -608,8 +608,6 @@ def generate_task_config_deterministic(
             if resolved_iso_dates:
                 for alternative_conditions in queries:
                     for query in alternative_conditions:
-                        # Overwrite the hardcoded dates list with the dynamically bumped dates
-                        if "dates" in query:
                             query["dates"] = resolved_iso_dates
                         
     eval_config = {
