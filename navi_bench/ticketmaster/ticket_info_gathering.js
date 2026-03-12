@@ -120,6 +120,7 @@
             if (url.includes('sports')) return 'sports';
             if (url.includes('concerts') || url.includes('music')) return 'concerts';
             if (url.includes('arts-theater') || url.includes('theater')) return 'theater';
+            if (url.includes('comedy')) return 'comedy';
             if (url.includes('family')) return 'family';
             return null;
         },
@@ -354,7 +355,7 @@
                     if (!eventName && href) {
                          const match = href.match(/\/event\/([a-z0-9]+)/i);
                          if (!match) return; // Skip if it's not a valid event link
-                         eventName = text.split('\n')[0]; // Fallback to first line of text
+                         eventName = card.textContent.trim().split('\n')[0].trim().toLowerCase();; // Fallback to first line of text
                     }
 
                     if (eventName) {

@@ -19,7 +19,11 @@ from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from navi_bench.base import BaseMetric, BaseTaskConfig, UserMetadata, get_import_path
-from navi_bench.dates import initialize_user_metadata
+from navi_bench.dates import (
+    initialize_placeholder_map,
+    initialize_user_metadata,
+    render_task_statement,
+)
 
 
 class SingleCandidateQuery(TypedDict, total=False):
@@ -499,21 +503,40 @@ class TicketmasterInfoGathering(BaseMetric):
             # Fallback to UI Filter Date Range (e.g. "Mar 3 - Apr 30, 2026")
             filter_date = info.get("filterDateRange")
             if filter_date:
-                range_match = re.search(r'(\w+\s+\d+).*?(\w+\s+\d+,\s*\d{4})', filter_date)
-                if range_match:
-                    try:
-                        year = datetime.now().year
-                        range_start = datetime.strptime(range_match.group(1) + f" {year}", "%b %d %Y")
-                        range_end = datetime.strptime(range_match.group(2).replace(',', ''), "%b %d %Y")
-                        for q_date in q_dates:
-                            try:
-                                qd = datetime.strptime(q_date, "%Y-%m-%d")
-                                if range_start <= qd <= range_end:
-                                    return True
-                            except ValueError:
-                                continue
-                    except ValueError:
-                        pass
+                try:
+                    # 1. Try to parse as a SINGLE date (e.g., "Apr 18, 2026")
+                    single_date = datetime.strptime(filter_date, "%b %d, %Y")
+                    for q_date in q_dates:
+                        try:
+                            if datetime.strptime(q_date, "%Y-%m-%d") == single_date:
+                                return True
+                        except ValueError:
+                            continue
+                except ValueError:
+                    # 2. Try to parse as a RANGE (e.g., "Mar 3 - Apr 30, 2026")
+                    range_match = re.search(r'(\w+\s+\d+).*?(\w+\s+\d+,\s*\d{4})', filter_date)
+                    if range_match:
+                        try:
+                            # 1. Parse the end date first, as it contains the definitive year
+                            range_end = datetime.strptime(range_match.group(2).replace(',', ''), "%b %d %Y")
+                            
+                            # 2. Extract the year from the end date to use for the start date
+                            year = range_end.year
+                            range_start = datetime.strptime(range_match.group(1) + f" {year}", "%b %d %Y")
+                            
+                            # 3. Handle end-of-year wrap around (e.g., Dec 30 - Jan 5, 2026 means Dec 30 is 2025)
+                            if range_start > range_end:
+                                range_start = range_start.replace(year=year - 1)
+
+                            for q_date in q_dates:
+                                try:
+                                    qd = datetime.strptime(q_date, "%Y-%m-%d")
+                                    if range_start <= qd <= range_end:
+                                        return True
+                                except ValueError:
+                                    continue
+                        except ValueError:
+                            pass
             return False
 
         if is_unavailable:
@@ -564,14 +587,27 @@ def generate_task_config_deterministic(
     timezone: str,
     timestamp: int | None = None,
     url: str = "https://www.ticketmaster.com",
-    values: dict[str, str] | None = None,  # 1. Accept the 'values' dictionary from the JSON
+    values: dict[str, str] | None = None,
 ) -> BaseTaskConfig:
-    
-    # 2. If values were provided, inject them into the placeholders in the task prompt
-    if values:
-        task = task.format(**values)
-        
     user_metadata = initialize_user_metadata(timezone, location, timestamp)
+    
+    if values:
+        # 1. Resolve relative dates and apply time-travel/bumping logic
+        placeholder_map = initialize_placeholder_map(values, user_metadata)
+        
+        # 2. Render the natural language prompt with the resolved text
+        task = render_task_statement(task, placeholder_map)
+        
+        # 3. Inject the bumped ISO date directly into the queries
+        # This dynamically overwrites the hardcoded past dates in your CSV
+        resolved_iso_date = placeholder_map.get("dateRange_date")
+        if resolved_iso_date:
+            for alternative_conditions in queries:
+                for query in alternative_conditions:
+                    # If the query is filtering by date, overwrite it with the valid bumped date
+                    if "dates" in query:
+                        query["dates"] = [resolved_iso_date]
+                        
     eval_config = {
         "_target_": get_import_path(TicketmasterInfoGathering),
         "queries": queries
