@@ -593,20 +593,24 @@ def generate_task_config_deterministic(
     
     if values:
         # 1. Resolve relative dates and apply time-travel/bumping logic
-        placeholder_map = initialize_placeholder_map(values, user_metadata)
+        placeholder_map, current_date = initialize_placeholder_map(user_metadata, values)
         
         # 2. Render the natural language prompt with the resolved text
         task = render_task_statement(task, placeholder_map)
         
-        # 3. Inject the bumped ISO date directly into the queries
-        # This dynamically overwrites the hardcoded past dates in your CSV
-        resolved_iso_date = placeholder_map.get("dateRange_date")
-        if resolved_iso_date:
-            for alternative_conditions in queries:
-                for query in alternative_conditions:
-                    # If the query is filtering by date, overwrite it with the valid bumped date
-                    if "dates" in query:
-                        query["dates"] = [resolved_iso_date]
+        # 3. Inject the bumped ISO dates directly into the queries
+        # FIX: The placeholder map stores a tuple of (natural_language_str, list_of_iso_dates)
+        date_tuple = placeholder_map.get("dateRange")
+        
+        if date_tuple and isinstance(date_tuple, tuple) and len(date_tuple) == 2:
+            _, resolved_iso_dates = date_tuple  # Unpack the tuple
+            
+            if resolved_iso_dates:
+                for alternative_conditions in queries:
+                    for query in alternative_conditions:
+                        # Overwrite the hardcoded dates list with the dynamically bumped dates
+                        if "dates" in query:
+                            query["dates"] = resolved_iso_dates
                         
     eval_config = {
         "_target_": get_import_path(TicketmasterInfoGathering),
