@@ -440,3 +440,7 @@ https://us.trip.com/hotels/list?cityId=633&cityName=New%20York&checkin=2026-04-0
 | Multi-filter combo | `filter1%2Cfilter2%2Cfilter3` | Comma-separated entries |
 
 ---
+
+**Last Updated:** 2026-03-15
+**Version:** 2.0.0 (Browser-Verified, corrected city IDs)
+**Verification Method:** Live Chromium browser testing on us.trip.com
