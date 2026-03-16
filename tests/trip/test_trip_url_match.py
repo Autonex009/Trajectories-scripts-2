@@ -758,3 +758,176 @@ class TestGenerateTaskConfig:
                 location="New York, NY, USA",
                 timezone="America/New_York",
             )
+
+
+# =============================================================================
+# 17. Edge Cases — Gaps from Bug Report
+# =============================================================================
+
+
+class TestEdgeCases:
+    """Tests for edge cases identified in the detailed bug report."""
+
+    def test_empty_gt_url_list(self):
+        """Empty gt_url=[] should not crash, just never match."""
+        metric = TripUrlMatch(gt_url=[])
+        # Should handle gracefully
+
+    @pytest.mark.asyncio
+    async def test_empty_gt_url_never_matches(self):
+        """Empty gt_url produces 0.0 score always."""
+        metric = TripUrlMatch(gt_url=[])
+        await metric.reset()
+        await metric.update(url=f"{BASE}?cityId=633")
+        result = await metric.compute()
+        assert result.score == 0.0
+
+    def test_malformed_listfilters_missing_tilde(self):
+        """Malformed filter entry without ~ should not crash."""
+        r = _parse(f"{BASE}?cityId=633&listFilters=16_5*16*5")
+        # Should parse without crashing, filter may be skipped
+        assert r["city_id"] == "633"
+
+    def test_malformed_listfilters_truncated(self):
+        """Truncated listFilters string should not crash."""
+        r = _parse(f"{BASE}?cityId=633&listFilters=16~")
+        assert r["city_id"] == "633"
+
+    def test_malformed_listfilters_empty_value(self):
+        """Empty listFilters parameter should not crash."""
+        r = _parse(f"{BASE}?cityId=633&listFilters=")
+        assert r["city_id"] == "633"
+        assert r["filters"] == {}
+
+    def test_cityname_only_no_cityid(self):
+        """URL with only cityName (no cityId) should still parse."""
+        r = _parse(f"{BASE}?cityName=New%20York")
+        assert r["city_name"] == "new york"
+
+    def test_distance_sort(self):
+        """Distance sort (ID 6) should parse and match."""
+        gt = f"{BASE}?cityId=633&listFilters=17~6*17*6"
+        match, _ = _match(gt, gt)
+        assert match is True
+
+    def test_distance_sort_vs_price_sort_mismatch(self):
+        """Distance sort (6) vs lowest price sort (3) = no match."""
+        gt = f"{BASE}?cityId=633&listFilters=17~6*17*6"
+        agent = f"{BASE}?cityId=633&listFilters=17~3*17*3"
+        match, _ = _match(agent, gt)
+        assert match is False
+
+    def test_non_hotel_list_path(self):
+        """Agent URL on a detail page path should not crash."""
+        gt = f"{BASE}?cityId=633&listFilters=16~5*16*5"
+        agent = "https://us.trip.com/hotels/detail/?hotelId=12345"
+        match, _ = _match(agent, gt)
+        assert match is False
+
+    def test_very_large_listfilters(self):
+        """URL with >10 filter entries should parse without issues."""
+        filters = ",".join([
+            "16~5*16*5",
+            "3~605*3*605", "3~42*3*42", "3~2*3*2",
+            "3~7*3*7", "3~22*3*22", "3~10*3*10",
+            "5~1*5*1", "23~10*23*10",
+            "6~9*6*9", "15~Range*15*0~500",
+            "17~3*17*3",
+        ])
+        r = _parse(f"{BASE}?cityId=633&listFilters={filters}")
+        assert "16" in r["filters"]
+        assert "3" in r["filters"]
+        assert "5" in r["filters"]
+        assert "23" in r["filters"]
+        assert "6" in r["filters"]
+        assert "15" in r["filters"]
+        assert "17" in r["filters"]
+
+    def test_duplicate_ages_parsed(self):
+        """Duplicate ages (e.g., ages=5,5) should parse correctly."""
+        r = _parse(f"{BASE}?cityId=633&children=2&ages=5,5")
+        assert r["children"] == "2"
+        assert r["ages"] == ["5", "5"]
+
+    def test_duplicate_ages_match(self):
+        """URLs with same duplicate ages should match."""
+        gt = f"{BASE}?cityId=633&children=2&ages=5,5"
+        match, _ = _match(gt, gt)
+        assert match is True
+
+    def test_2_star_filter(self):
+        """2-star filter should work."""
+        gt = f"{BASE}?cityId=633&listFilters=16~2*16*2"
+        match, _ = _match(gt, gt)
+        assert match is True
+
+    def test_guest_rating_6plus(self):
+        """Guest rating 6+ (value 7) should work."""
+        gt = f"{BASE}?cityId=633&listFilters=6~7*6*7"
+        match, _ = _match(gt, gt)
+        assert match is True
+
+
+# =============================================================================
+# 18. CSV Self-Match Validation
+# =============================================================================
+
+
+class TestCSVSelfMatch:
+    """Validate that all 70 CSV ground-truth URLs self-match."""
+
+    def test_all_csv_urls_self_match(self):
+        """Every gt_url in the CSV should match itself."""
+        import csv
+        import json
+        import os
+
+        csv_path = os.path.join(
+            os.path.dirname(__file__),
+            "..", "navi_bench", "trip", "trip_benchmark_tasks.csv"
+        )
+        if not os.path.exists(csv_path):
+            pytest.skip("CSV file not found")
+
+        with open(csv_path, encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+
+        assert len(rows) >= 70, f"Expected 70+ rows, got {len(rows)}"
+
+        failures = []
+        for i, row in enumerate(rows):
+            config = json.loads(row["task_generation_config_json"])
+            gt_urls = config.get("gt_url", [])
+            for gt_url in gt_urls:
+                v = TripUrlMatch(gt_url=gt_url)
+                matched, details = v._urls_match(gt_url, gt_url)
+                if not matched:
+                    failures.append(f"Row {i} ({row['task_id']}): {gt_url}")
+
+        assert failures == [], f"Self-match failures:\n" + "\n".join(failures)
+
+    def test_csv_null_encoding(self):
+        """Verify CSV uses proper null encoding (not empty strings)."""
+        import csv
+        import os
+
+        csv_path = os.path.join(
+            os.path.dirname(__file__),
+            "..", "navi_bench", "trip", "trip_benchmark_tasks.csv"
+        )
+        if not os.path.exists(csv_path):
+            pytest.skip("CSV file not found")
+
+        with open(csv_path, encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+
+        for row in rows:
+            assert row["suggested_max_steps"] == "30", \
+                f"suggested_max_steps should be '30', got '{row['suggested_max_steps']}'"
+            assert row["suggested_hint"] == "null", \
+                f"suggested_hint should be 'null', got '{row['suggested_hint']}'"
+            assert row["metadata_json"] == "null", \
+                f"metadata_json should be 'null', got '{row['metadata_json']}'"
+
