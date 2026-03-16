@@ -394,8 +394,9 @@ class TicketmasterInfoGathering(BaseMetric):
             # Check parsed city from event card OR the typed UI location filter
             city_data = (info.get("city") or "").lower()
             filter_loc = (info.get("filterLocation") or "").lower()
+            url_data = (info.get("url") or "").lower()
             
-            city_matched = any(c.lower() in city_data for c in q_cities)
+            city_matched = any(c.lower() in city_data or c.lower() in url_data for c in q_cities)
             filter_loc_matched = any(c.lower() in filter_loc for c in q_cities)
             
             if not (city_matched or filter_loc_matched):
