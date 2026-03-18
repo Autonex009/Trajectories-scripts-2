@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from navi_bench.base import BaseMetric, BaseTaskConfig, UserMetadata, get_import_path
-from navi_bench.dates import initialize_user_metadata, initialize_user_metadata, render_task_statement
+from navi_bench.dates import initialize_user_metadata, initialize_placeholder_map, render_task_statement
 
 class SingleCandidateQuery(TypedDict, total=False):
     event_name: str | None
