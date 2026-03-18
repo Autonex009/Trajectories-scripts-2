@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from navi_bench.base import BaseMetric, BaseTaskConfig, UserMetadata, get_import_path
-from navi_bench.dates import initialize_user_metadata
+from navi_bench.dates import initialize_user_metadata, initialize_user_metadata, render_task_statement
 
 class SingleCandidateQuery(TypedDict, total=False):
     event_name: str | None
@@ -319,9 +319,24 @@ def generate_task_config_deterministic(
 ) -> BaseTaskConfig:
     user_metadata = initialize_user_metadata(timezone, location, timestamp)
     
-    # Check if 'values' exists and perform a direct formatting substitution
     if values:
-        task = task.format(**values)
+        # 1. Resolve relative dates and apply time-travel/bumping logic
+        placeholder_map, current_date = initialize_placeholder_map(user_metadata, values)
         
+        # 2. Render the natural language prompt with the resolved text
+        task = render_task_statement(task, placeholder_map)
+        
+        # 3. Inject the bumped ISO dates directly into the queries
+        # FIX: The placeholder map stores a tuple of (natural_language_str, list_of_iso_dates)
+        date_tuple = placeholder_map.get("dateRange")
+        
+        if date_tuple and isinstance(date_tuple, tuple) and len(date_tuple) == 2:
+            _, resolved_iso_dates = date_tuple  # Unpack the tuple
+            
+            if resolved_iso_dates:
+                for alternative_conditions in queries:
+                    for query in alternative_conditions:
+                        query["dates"] = resolved_iso_dates
+                        
     eval_config = {"_target_": get_import_path(VividSeatsInfoGathering), "queries": queries}
     return BaseTaskConfig(url=url, task=task, user_metadata=user_metadata, eval_config=eval_config)
