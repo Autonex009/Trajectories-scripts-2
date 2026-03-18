@@ -128,15 +128,16 @@ CATEGORY_NAMES = {
 }
 
 # Known amenity IDs → names (for logging / debugging)
+# Browser-verified against us.trip.com listFilters (Mar 2026)
 AMENITY_IDS = {
-    "2":   "free_wifi",
-    "7":   "parking",
-    "10":  "restaurant",
-    "22":  "spa",
-    "42":  "gym",
-    "103": "airport_shuttle",
-    "104": "pet_friendly",
-    "605": "pool",
+    "102":    "free_wifi",
+    "656001": "parking",
+    "147":    "restaurant",
+    "65":     "spa",
+    "42":     "gym",
+    "103":    "airport_shuttle",
+    "104":    "pet_friendly",
+    "605":    "pool",
 }
 
 # Known sort IDs
@@ -357,7 +358,12 @@ class TripUrlMatch(BaseMetric):
             # Children ages comparison (order-independent)
             agent_ages = agent_parts["ages"]
             gt_ages = gt_parts["ages"]
-            if agent_ages and gt_ages:
+            if gt_ages:
+                if not agent_ages:
+                    details["mismatches"].append(
+                        f"Children ages missing in agent URL (expected {gt_ages})"
+                    )
+                    return False, details
                 if sorted(agent_ages) != sorted(gt_ages):
                     details["mismatches"].append(
                         f"Children ages: {agent_ages} vs {gt_ages}"
@@ -421,7 +427,6 @@ class TripUrlMatch(BaseMetric):
             filters: dict mapping category_id → set of parsed filter entries
         """
         url = url.strip()
-        url = unquote(url)
 
         if not url.startswith(("http://", "https://")):
             url = "https://" + url
