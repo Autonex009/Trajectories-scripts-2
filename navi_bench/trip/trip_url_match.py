@@ -274,8 +274,6 @@ class TripUrlMatch(BaseMetric):
         # Accept any subdomain of trip.com
         if domain.endswith(".trip.com"):
             return True
-        if domain == "trip.com":
-            return True
         return False
 
     # ========================================================================
@@ -295,16 +293,31 @@ class TripUrlMatch(BaseMetric):
             # 1. Compare city (by cityId — the authoritative identifier)
             agent_city = agent_parts["city_id"]
             gt_city = gt_parts["city_id"]
-            if agent_city and gt_city and agent_city != gt_city:
-                details["mismatches"].append(
-                    f"City ID: '{agent_city}' vs '{gt_city}'"
-                )
-                return False, details
+            if gt_city:
+                if not agent_city:
+                    # GT requires a city but agent didn't specify one
+                    details["mismatches"].append(
+                        f"City ID missing in agent URL (expected '{gt_city}')"
+                    )
+                    return False, details
+                if agent_city != gt_city:
+                    details["mismatches"].append(
+                        f"City ID: '{agent_city}' vs '{gt_city}'"
+                    )
+                    return False, details
+            elif agent_city and not gt_city:
+                # Agent has city but GT doesn't — fall back to name comparison
+                pass
 
             # If one URL has cityId and the other doesn't, fall back to cityName
             if not agent_city or not gt_city:
                 agent_name = agent_parts["city_name"]
                 gt_name = gt_parts["city_name"]
+                if gt_name and not agent_name:
+                    details["mismatches"].append(
+                        f"City name missing in agent URL (expected '{gt_name}')"
+                    )
+                    return False, details
                 if agent_name and gt_name and agent_name != gt_name:
                     details["mismatches"].append(
                         f"City name: '{agent_name}' vs '{gt_name}'"
@@ -315,6 +328,11 @@ class TripUrlMatch(BaseMetric):
             for date_key in ("checkin", "checkout"):
                 agent_date = agent_parts[date_key]
                 gt_date = gt_parts[date_key]
+                if gt_date and not agent_date:
+                    details["mismatches"].append(
+                        f"{date_key} missing in agent URL (expected '{gt_date}')"
+                    )
+                    return False, details
                 if agent_date and gt_date and agent_date != gt_date:
                     details["mismatches"].append(
                         f"{date_key}: '{agent_date}' vs '{gt_date}'"
@@ -325,6 +343,11 @@ class TripUrlMatch(BaseMetric):
             for guest_key in ("adult", "children", "crn"):
                 agent_val = agent_parts[guest_key]
                 gt_val = gt_parts[guest_key]
+                if gt_val and not agent_val:
+                    details["mismatches"].append(
+                        f"{guest_key} missing in agent URL (expected '{gt_val}')"
+                    )
+                    return False, details
                 if agent_val and gt_val and agent_val != gt_val:
                     details["mismatches"].append(
                         f"{guest_key}: '{agent_val}' vs '{gt_val}'"
