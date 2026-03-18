@@ -49,7 +49,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from navi_bench.base import BaseMetric, BaseTaskConfig, get_import_path
-from navi_bench.dates import initialize_user_metadata
+from navi_bench.dates import initialize_placeholder_map, initialize_user_metadata, render_task_statement
 
 
 class InputDict(TypedDict, total=False):
@@ -674,12 +674,25 @@ def generate_task_config(
     ground_truth_url: str | None = None,
     timestamp: int | None = None,
     url: str = "https://us.trip.com",
+    values: dict[str, str] | None = None,
 ) -> BaseTaskConfig:
     """Generate task configuration for Trip.com URL matching.
 
     Accepts either ``gt_url`` (list of strings) or ``ground_truth_url``
     (single string) so that the function works both when called from
     ``instantiate()`` via benchmark CSV and when called directly.
+
+    Args:
+        task: Task description.  May contain ``{placeholder}`` tokens.
+        location: User location string.
+        timezone: IANA timezone string.
+        gt_url: Ground-truth URL(s).
+        ground_truth_url: Single GT URL (alternative to gt_url).
+        timestamp: Unix timestamp.  ``None`` means "now".
+        url: Starting URL.
+        values: Placeholder-key → relative-date expression mapping.
+                Resolved dates are substituted into *task* text and
+                into ``gt_url`` strings (replacing ``{placeholder}`` tokens).
     """
     # Resolve gt_url from either parameter
     if gt_url is None and ground_truth_url is not None:
@@ -689,9 +702,26 @@ def generate_task_config(
     elif gt_url is None:
         raise ValueError("Either 'gt_url' or 'ground_truth_url' must be provided.")
 
+    values = values or {}
     user_metadata = initialize_user_metadata(timezone, location, timestamp)
+    resolved_placeholders, _ = initialize_placeholder_map(user_metadata, values)
+
+    # Render {placeholder} tokens in task text
+    rendered_task = render_task_statement(task, resolved_placeholders)
+
+    # Substitute resolved dates into gt_url strings
+    # For Trip: {checkinDate} → first ISO date, {checkoutDate} → last ISO date
+    rendered_gt_urls: list[str] = []
+    for u in gt_url:
+        rendered_u = u
+        for placeholder_key, (_, dates) in resolved_placeholders.items():
+            template = "{" + placeholder_key + "}"
+            if template in rendered_u and dates:
+                rendered_u = rendered_u.replace(template, dates[0])
+        rendered_gt_urls.append(rendered_u)
+
     eval_target = get_import_path(TripUrlMatch)
-    eval_config = {"_target_": eval_target, "gt_url": gt_url}
+    eval_config = {"_target_": eval_target, "gt_url": rendered_gt_urls}
     return BaseTaskConfig(
-        url=url, task=task, user_metadata=user_metadata, eval_config=eval_config
+        url=url, task=rendered_task, user_metadata=user_metadata, eval_config=eval_config
     )

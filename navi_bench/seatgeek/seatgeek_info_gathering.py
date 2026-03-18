@@ -933,6 +933,7 @@ def generate_task_config_deterministic(
     timezone: str,
     timestamp: int | None = None,
     url: str = "https://seatgeek.com",
+    values: dict[str, str] | None = None,
 ) -> BaseTaskConfig:
     """Generate deterministic task configuration.
     
@@ -940,21 +941,42 @@ def generate_task_config_deterministic(
         mode: Task mode ("any" or "all"). Currently accepted for API
               compatibility but not used for query expansion. All queries
               are passed through unchanged.
-        task: Task description string.
-        queries: List of query alternatives.
+        task: Task description string.  May contain ``{placeholder}``
+              tokens that will be resolved using *values*.
+        queries: List of query alternatives.  Query ``dates`` fields set
+                 to a ``"{placeholder}"`` string will be replaced with
+                 the resolved ISO dates from *values*.
         location: User location string.
         timezone: IANA timezone string.
-        timestamp: Optional unix timestamp.
+        timestamp: Optional unix timestamp.  ``None`` means "now".
         url: Starting URL.
+        values: Optional mapping of placeholder keys to relative-date
+                expressions (e.g. ``{"dateRange": "the next Saturday"}``).
+                Resolved at runtime via :func:`dates.resolve_placeholder_values`.
     """
+    values = values or {}
     user_metadata = initialize_user_metadata(timezone, location, timestamp)
-    
+    resolved_placeholders, _ = initialize_placeholder_map(user_metadata, values)
+
+    # Render {placeholder} tokens in task text
+    rendered_task = render_task_statement(task, resolved_placeholders)
+
+    # Inject resolved dates into query "dates" fields that are placeholder strings
+    for placeholder_key, (_, dates) in resolved_placeholders.items():
+        template_string = "{" + placeholder_key + "}"
+        if not dates:
+            raise ValueError(f"No future dates resolved for placeholder '{placeholder_key}'")
+        for query_group in queries:
+            for candidate_obj in query_group:
+                if "dates" in candidate_obj and candidate_obj["dates"] == template_string:
+                    candidate_obj["dates"] = dates
+
     eval_config = {
         "_target_": get_import_path(SeatGeekInfoGathering),
         "queries": queries
     }
 
-    return BaseTaskConfig(url=url, task=task, user_metadata=user_metadata, eval_config=eval_config)
+    return BaseTaskConfig(url=url, task=rendered_task, user_metadata=user_metadata, eval_config=eval_config)
 
 
 if __name__ == "__main__":
