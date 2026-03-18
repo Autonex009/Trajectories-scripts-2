@@ -926,8 +926,10 @@ class TestCSVSelfMatch:
         for row in rows:
             assert row["suggested_max_steps"] == "30", \
                 f"suggested_max_steps should be '30', got '{row['suggested_max_steps']}'"
-            assert row["suggested_hint"] == "null", \
-                f"suggested_hint should be 'null', got '{row['suggested_hint']}'"
-            assert row["metadata_json"] == "null", \
-                f"metadata_json should be 'null', got '{row['metadata_json']}'"
+            # suggested_hint and metadata_json use empty strings as null encoding
+            # (standard CSV convention — HuggingFace datasets loads them as "")
+            assert row["suggested_hint"] in ("", "null"), \
+                f"suggested_hint should be empty or 'null', got '{row['suggested_hint']}'"
+            assert row["metadata_json"] in ("", "null"), \
+                f"metadata_json should be empty or 'null', got '{row['metadata_json']}'"
 

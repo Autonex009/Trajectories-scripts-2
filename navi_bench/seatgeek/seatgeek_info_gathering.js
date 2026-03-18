@@ -62,8 +62,9 @@
             const segments = path.split('/').filter(Boolean);
 
             // Event listing: /{team}-tickets/{date-venue}/{category}/{id}
-            // Pattern: at least 4 path segments, last one is numeric
-            if (segments.length >= 4 && /^\d+$/.test(segments[segments.length - 1]) &&
+            // or 3-segment: /{team}-tickets/{venue-info}/{id}
+            // Pattern: at least 3 path segments, last one is numeric
+            if (segments.length >= 3 && /^\d+$/.test(segments[segments.length - 1]) &&
                 segments[0].endsWith('-tickets')) {
                 return 'event_listing';
             }
