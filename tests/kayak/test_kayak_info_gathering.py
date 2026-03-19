@@ -300,7 +300,7 @@ class TestUpdateAndComputeIntegration:
 class TestTaskConfigGeneration:
     """Test task configuration generation and date injection."""
 
-    @patch("navi_bench.dates.initialize_placeholder_map")
+    @patch("navi_bench.kayak.kayak_info_gathering.initialize_placeholder_map")
     def test_generate_task_config_deterministic_with_dates(self, mock_init_map):
         """Test task config injects dates into all three subdomain query fields."""
         # Mock the date resolver to return a successful tuple mapping
