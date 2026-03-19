@@ -12,7 +12,7 @@ from typing_extensions import TypedDict
 
 # Assuming you have a similar base structure as your previous project
 from navi_bench.base import BaseMetric, BaseTaskConfig, get_import_path
-from navi_bench.dates import initialize_user_metadata
+from navi_bench.dates import initialize_user_metadata, initialize_placeholder_map, render_task_statement
 
 class MultiCandidateQuery(TypedDict, total=False):
     # Flight fields
@@ -280,6 +280,20 @@ class KayakInfoGathering(BaseMetric):
             max_price = query["max_price"]
             eval_max_price = info.get("price") or info.get("filterMaxPrice")
             if eval_max_price is None or eval_max_price > max_price: return False
+        
+        # --- BUG FIX 1: Min Price ---
+        if "min_price" in query and query["min_price"] is not None:
+            min_price = query["min_price"]
+            # For min price, we strictly need the actual card price to confirm it exceeds the floor
+            eval_price = info.get("price")
+            if eval_price is None or eval_price < min_price: return False
+
+        # --- BUG FIX 2: Cabin Classes ---
+        if q_cabin_classes := query.get("cabin_classes"):
+            # Check the specific cabinClass field, falling back to the raw 'info' text dump just in case
+            card_info = (info.get("cabinClass") or info.get("info") or "").lower()
+            if not any(c.lower() in card_info for c in q_cabin_classes):
+                return False
 
         # 6. Direct Flights Only
         if query.get("require_direct") is True:
@@ -333,5 +347,55 @@ class KayakInfoGathering(BaseMetric):
         if "min_passengers" in query and query["min_passengers"] is not None:
             passengers = info.get("passengers")
             if passengers is None or passengers < query["min_passengers"]: return False
+        
+        # Hotel Check-in Dates
+        if q_check_in := query.get("check_in_dates"):
+            if info.get("checkIn") not in q_check_in: return False
+            
+        # Car Pickup Dates
+        if q_pickup_dates := query.get("pickup_dates"):
+            if info.get("pickUpDate") not in q_pickup_dates: return False
 
         return True
+
+
+def generate_task_config_deterministic(
+    mode: Literal["any", "all"],
+    task: str,
+    queries: list[list[MultiCandidateQuery]],
+    location: str,
+    timezone: str,
+    timestamp: int | None = None,
+    url: str = "https://www.kayak.co.in/",
+    values: dict[str, str] | None = None,
+) -> BaseTaskConfig:
+    user_metadata = initialize_user_metadata(timezone, location, timestamp)
+    
+    if values:
+        # 1. Resolve relative dates and apply time-travel/bumping logic
+        placeholder_map, current_date = initialize_placeholder_map(user_metadata, values)
+        
+        # 2. Render the natural language prompt with the resolved text
+        task = render_task_statement(task, placeholder_map)
+        
+        # 3. Inject the bumped ISO dates directly into the queries
+        # We look specifically for 'dateRange' since that's what your CSVs use
+        date_tuple = placeholder_map.get("dateRange")
+        
+        if date_tuple and isinstance(date_tuple, tuple) and len(date_tuple) == 2:
+            _, resolved_iso_dates = date_tuple  # Unpack the tuple
+            
+            if resolved_iso_dates:
+                for alternative_conditions in queries:
+                    for query in alternative_conditions:
+                        # Inject into all Kayak domain date fields so it works for Flights, Hotels, and Cars
+                        query["depart_dates"] = resolved_iso_dates
+                        query["check_in_dates"] = resolved_iso_dates
+                        query["pickup_dates"] = resolved_iso_dates
+                        
+    eval_config = {
+        "_target_": get_import_path(KayakInfoGathering),
+        "queries": queries
+    }
+    
+    return BaseTaskConfig(url=url, task=task, user_metadata=user_metadata, eval_config=eval_config)

@@ -11,12 +11,26 @@
     const Parsers = {
         price: (text) => {
             if (!text) return null;
-            let match = text.match(/(?:₹|rs\.?|inr|[$])?\s*([\d,]+)/i);
-            if (match && match[1]) {
-                return parseFloat(match[1].replace(/,/g, ""));
+            // Regex captures the currency symbol (Group 1) and the amount (Group 2)
+            let match = text.match(/([$€£₹]|rs\.?|inr)?\s*([\d,]+(?:\.\d+)?)/i);
+            if (match && match[2]) {
+                let amount = parseFloat(match[2].replace(/,/g, ""));
+                let symbol = (match[1] || "").toLowerCase();
+                
+                // Normalize to INR based on the detected symbol
+                if (symbol === '$') {
+                    amount *= 83.0; // Approx USD to INR
+                } else if (symbol === '€') {
+                    amount *= 90.0; // Approx EUR to INR
+                } else if (symbol === '£') {
+                    amount *= 105.0; // Approx GBP to INR
+                }
+                
+                return amount;
             }
             return null;
         },
+
         stops: (text) => {
             if (!text) return null;
             if (/direct|nonstop|non-stop/i.test(text)) return 0;
@@ -59,9 +73,22 @@
                     if (lbl) f.filterStops.push(getText(lbl));
                 });
                 
+                // 3. Max Price Slider
                 const priceNode = document.querySelector('div[role="region"][aria-label="Price"] span[role="slider"]');
                 if (priceNode && priceNode.getAttribute('aria-valuenow')) {
-                    f.filterMaxPrice = parseFloat(priceNode.getAttribute('aria-valuenow'));
+                    let val = parseFloat(priceNode.getAttribute('aria-valuenow'));
+                    
+                    // Kayak's aria-valuetext usually holds the currency string (e.g., "$ 150 - $ 0")
+                    let valueText = priceNode.getAttribute('aria-valuetext') || "";
+                    if (valueText.includes('$')) {
+                        val *= 83.0;
+                    } else if (valueText.includes('€')) {
+                        val *= 90.0;
+                    } else if (valueText.includes('£')) {
+                        val *= 105.0;
+                    }
+                    
+                    f.filterMaxPrice = val;
                 }
             } catch(e) { console.error("Filter parse error", e); }
             return f;
@@ -100,6 +127,16 @@
                             if (timeMatch) { departTime = timeMatch[2]; arrivalTime = timeMatch[4]; }
                         }
                     }
+
+                    // --- BUG FIX: Extract Cabin Class ---
+                    // Kayak stores cabin info in spans usually containing the word "Cabin" or next to the price
+                    const cabinNode = row.querySelector('[aria-label*="Cabin"], [class*="cabin"]');
+                    let cabinText = cabinNode ? getText(cabinNode) : '';
+                    if (!cabinText && /premium economy|first class|business class|economy/i.test(rowText)) {
+                        const match = rowText.match(/(premium economy|first class|business class|economy)/i);
+                        if (match) cabinText = match[1];
+                    }
+                    // ------------------------------------
 
                     if (extractedPrice) {
                         collected.push({
