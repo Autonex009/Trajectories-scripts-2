@@ -15,39 +15,72 @@ from navi_bench.base import BaseMetric, BaseTaskConfig, get_import_path
 from navi_bench.dates import initialize_user_metadata
 
 class MultiCandidateQuery(TypedDict, total=False):
+    # Flight fields
     origins: list[str] | None
     destinations: list[str] | None
     depart_dates: list[str] | None
     return_dates: list[str] | None
     airlines: list[str] | None
-    
-    max_price: float | None
-    min_price: float | None
+    require_direct: bool | None
     max_stops: int | None
     cabin_classes: list[str] | None
     
-    require_direct: bool | None
+    # Universal / Shared fields
+    max_price: float | None
+    min_price: float | None
+    
+    # Hotel fields
+    cities: list[str] | None
+    check_in_dates: list[str] | None
+    check_out_dates: list[str] | None
+    min_stars: int | None
+    min_score: float | None
+    require_freebies: list[str] | None
+
+    # Car fields
+    pickup_locations: list[str] | None
+    pickup_dates: list[str] | None
+    car_types: list[str] | None
+    min_passengers: int | None
 
 class InfoDict(TypedDict, total=False):
     url: str
     source: str
+    pageType: str
+    antiBotStatus: str
+    price: float
+    
+    # Flight
     origin: str
     destination: str
     departDate: str
-    returnDate: str
     departTime: str
     arrivalTime: str
     airline: str
-    price: float
     stops: int
-    duration: str
-    cabinClass: str
-    pageType: str
-    antiBotStatus: str
-    
-    filterMaxPrice: float
     filterMaxStops: int
     filterAirlines: list[str]
+
+    # Hotel
+    city: str
+    checkIn: str
+    checkOut: str
+    title: str
+    score: float | None
+    stars: int
+    freebies: list[str]
+    location: str
+
+    # Car
+    pickUpLocation: str
+    dropOffLocation: str
+    pickUpDate: str
+    category: str
+    provider: str
+    agency: str
+    passengers: int | None
+    
+    filterMaxPrice: float
 
 class FinalResult(BaseModel):
     score: float
@@ -121,7 +154,16 @@ class KayakInfoGathering(BaseMetric):
         unique_infos = []
         seen = set()
         for info in all_frame_infos:
-            key = f"{info.get('airline')}-{info.get('departTime')}-{info.get('price')}-{info.get('source')}"
+            ptype = info.get("pageType")
+            if ptype == "flight_results":
+                key = f"flight-{info.get('airline')}-{info.get('departTime')}-{info.get('price')}"
+            elif ptype == "hotel_results":
+                key = f"hotel-{info.get('title')}-{info.get('price')}"
+            elif ptype == "car_results":
+                key = f"car-{info.get('title')}-{info.get('provider')}-{info.get('price')}"
+            else:
+                key = str(info)
+                
             if key not in seen:
                 seen.add(key)
                 unique_infos.append(info)
@@ -133,6 +175,7 @@ class KayakInfoGathering(BaseMetric):
             
             # --- NEW: Print the extracted sidebar filters ---
             first_info = infos[0]
+            ptype = first_info.get("pageType")
             if first_info.get('filterMaxPrice') or first_info.get('filterAirlines') or first_info.get('filterStops'):
                 print("-" * 50)
                 print(">> ACTIVE GLOBALS FILTERS DETECTED:")
@@ -146,13 +189,25 @@ class KayakInfoGathering(BaseMetric):
             # ------------------------------------------------
 
             for i, item in enumerate(infos[:10], 1):
-                airline = item.get("airline", "Unknown").title()
                 price = item.get("price", "N/A")
-                stops = "Direct" if item.get("stops") == 0 else f"{item.get('stops')} Stops"
-                depart = item.get("departTime", "XX:XX")
-                arrive = item.get("arrivalTime", "XX:XX")
                 
-                print(f"  {i}. {depart}-{arrive} | {airline} | {stops} | ₹{price}", flush=True)
+                if ptype == "flight_results":
+                    airline = item.get("airline", "Unknown").title()
+                    stops = "Direct" if item.get("stops") == 0 else f"{item.get('stops')} Stops"
+                    depart = item.get("departTime", "XX:XX")
+                    arrive = item.get("arrivalTime", "XX:XX")
+                    print(f"  {i}. {depart}-{arrive} | {airline} | {stops} | ₹{price}", flush=True)
+                    
+                elif ptype == "hotel_results":
+                    name = item.get("title", "Unknown")
+                    score = item.get("score", "N/A")
+                    stars = item.get("stars", 0)
+                    print(f"  {i}. {name} | {stars}★ | Rating: {score} | ₹{price}", flush=True)
+                    
+                elif ptype == "car_results":
+                    name = item.get("title", "Unknown")
+                    provider = item.get("provider", "Unknown")
+                    print(f"  {i}. {name} | {provider} | ₹{price}", flush=True)
 
         page_type = infos[0].get("pageType", "unknown") if infos else "unknown"
         anti_bot = infos[0].get("antiBotStatus", "unknown") if infos else "unknown"
@@ -173,7 +228,7 @@ class KayakInfoGathering(BaseMetric):
             if page_visit["anti_bot"] != "clear":
                 continue
                 
-            if page_visit["page_type"] == "flight_results":
+            if page_visit["page_type"] in ["flight_results", "hotel_results", "car_results"]:
                 for i, alternative_conditions in enumerate(self.queries):
                     if self._is_query_covered[i]: continue
                     for info in page_visit["infos"]:
@@ -228,12 +283,55 @@ class KayakInfoGathering(BaseMetric):
 
         # 6. Direct Flights Only
         if query.get("require_direct") is True:
-            # We strictly check the scraped flight card here
-            if info.get("stops") != 0: return False
+            # Check flight card OR if "Direct" is checked in the sidebar
+            card_direct = info.get("stops") == 0
+            filter_direct = any("direct" in s.lower() for s in info.get("filterStops", []))
+            
+            if not (card_direct or filter_direct): 
+                return False
             
         # 7. Max Stops
         if "max_stops" in query and query["max_stops"] is not None:
-            eval_stops = info.get("stops")
-            if eval_stops is None or eval_stops > query["max_stops"]: return False
+            max_stops = query["max_stops"]
+            card_stops = info.get("stops")
+            
+            # Check if card passes
+            card_passes = card_stops is not None and card_stops <= max_stops
+            
+            # Check if sidebar filter passes (e.g. "1 stop" checked means max 1)
+            filter_stops = info.get("filterStops", [])
+            filter_passes = False
+            if max_stops >= 0 and any("direct" in s.lower() for s in filter_stops):
+                filter_passes = True
+            if max_stops >= 1 and any("1 stop" in s.lower() for s in filter_stops):
+                filter_passes = True
+                
+            if not (card_passes or filter_passes): 
+                return False
+        
+        # --- NEW: HOTEL CHECKS ---
+        if q_cities := query.get("cities"):
+            info_city = (info.get("city") or "").lower()
+            if not any(c.lower() in info_city for c in q_cities): return False
+            
+        if "min_stars" in query and query["min_stars"] is not None:
+            if info.get("stars", 0) < query["min_stars"]: return False
+            
+        if "min_score" in query and query["min_score"] is not None:
+            score = info.get("score")
+            if score is None or score < query["min_score"]: return False
+            
+        if q_freebies := query.get("require_freebies"):
+            info_freebies = [f.lower() for f in info.get("freebies", [])]
+            if not all(any(qf.lower() in inf for inf in info_freebies) for qf in q_freebies): return False
+
+        # --- NEW: CAR CHECKS ---
+        if q_pickup := query.get("pickup_locations"):
+            info_pickup = (info.get("pickUpLocation") or "").lower()
+            if not any(p.lower() in info_pickup for p in q_pickup): return False
+            
+        if "min_passengers" in query and query["min_passengers"] is not None:
+            passengers = info.get("passengers")
+            if passengers is None or passengers < query["min_passengers"]: return False
 
         return True
