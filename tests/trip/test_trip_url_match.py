@@ -933,3 +933,390 @@ class TestCSVSelfMatch:
             assert row["metadata_json"] in ("", "null"), \
                 f"metadata_json should be empty or 'null', got '{row['metadata_json']}'"
 
+
+
+# =============================================================================
+# FLIGHT URL MATCH TESTS (TripFlightUrlMatch)
+# =============================================================================
+
+from navi_bench.trip.trip_flight_url_match import (
+    TripFlightUrlMatch,
+    FlightVerifierResult,
+    generate_task_config as flight_generate_task_config,
+)
+
+FLIGHT_BASE = "https://us.trip.com/flights/showfarefirst"
+
+
+def _flight_v(gt_url: str | None = None):
+    """Create a flight verifier with a default GT URL."""
+    if gt_url is None:
+        gt_url = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&rdate=2026-04-17&flighttype=rt&class=y&quantity=1"
+    return TripFlightUrlMatch(gt_url=gt_url)
+
+
+def _flight_match(agent_url: str, gt_url: str) -> tuple[bool, dict]:
+    """Shortcut for flight URL matching."""
+    v = _flight_v(gt_url)
+    return v._urls_match(agent_url, gt_url)
+
+
+# ─────────────────────────────────────────────────────────────
+# 17. Flight URL Parsing
+# ─────────────────────────────────────────────────────────────
+
+class TestFlightURLParsing:
+    """Test parsing of Trip.com flight URLs into components."""
+
+    def test_round_trip_url(self):
+        url = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&rdate=2026-04-17&flighttype=rt&class=y&quantity=1"
+        v = _flight_v()
+        parts = v._parse_flight_url(url)
+        assert parts["dcity"] == "nyc"
+        assert parts["acity"] == "lon"
+        assert parts["ddate"] == "2026-04-10"
+        assert parts["rdate"] == "2026-04-17"
+        assert parts["flighttype"] == "rt"
+        assert parts["class"] == "y"
+        assert parts["quantity"] == "1"
+
+    def test_one_way_url(self):
+        url = f"{FLIGHT_BASE}?dcity=lax&acity=tyo&ddate=2026-05-01&flighttype=ow&class=y&quantity=2"
+        v = _flight_v()
+        parts = v._parse_flight_url(url)
+        assert parts["dcity"] == "lax"
+        assert parts["acity"] == "tyo"
+        assert parts["ddate"] == "2026-05-01"
+        assert parts["rdate"] == ""  # no return date for one-way
+        assert parts["flighttype"] == "ow"
+        assert parts["quantity"] == "2"
+
+    def test_case_insensitive_city_codes(self):
+        url = f"{FLIGHT_BASE}?dcity=NYC&acity=LON&ddate=2026-04-10&flighttype=rt&class=Y&quantity=1"
+        v = _flight_v()
+        parts = v._parse_flight_url(url)
+        assert parts["dcity"] == "nyc"
+        assert parts["acity"] == "lon"
+        assert parts["class"] == "y"
+
+    def test_business_class(self):
+        url = f"{FLIGHT_BASE}?dcity=sfo&acity=sin&ddate=2026-06-01&flighttype=ow&class=c&quantity=1"
+        v = _flight_v()
+        parts = v._parse_flight_url(url)
+        assert parts["class"] == "c"
+
+    def test_first_class(self):
+        url = f"{FLIGHT_BASE}?dcity=jfk&acity=cdg&ddate=2026-07-01&flighttype=rt&class=f&quantity=1"
+        v = _flight_v()
+        parts = v._parse_flight_url(url)
+        assert parts["class"] == "f"
+
+    def test_url_without_scheme(self):
+        url = "us.trip.com/flights/showfarefirst?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        v = _flight_v()
+        parts = v._parse_flight_url(url)
+        assert parts["dcity"] == "nyc"
+
+    def test_extra_params_ignored(self):
+        """Extra params like lowpricemode shouldn't affect parsing."""
+        url = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1&lowpricemode=false&searchboxarg=t"
+        v = _flight_v()
+        parts = v._parse_flight_url(url)
+        assert parts["dcity"] == "nyc"
+        assert parts["quantity"] == "1"
+
+
+# ─────────────────────────────────────────────────────────────
+# 18. Flight URL Matching
+# ─────────────────────────────────────────────────────────────
+
+class TestFlightURLMatching:
+    """Test flight URL matching logic."""
+
+    def test_exact_match(self):
+        url = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&rdate=2026-04-17&flighttype=rt&class=y&quantity=1"
+        match, details = _flight_match(url, url)
+        assert match is True
+
+    def test_same_match_different_extra_params(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&rdate=2026-04-17&flighttype=rt&class=y&quantity=1"
+        agent = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&rdate=2026-04-17&flighttype=rt&class=y&quantity=1&lowpricemode=false"
+        match, _ = _flight_match(agent, gt)
+        assert match is True
+
+    def test_wrong_departure_city(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        agent = f"{FLIGHT_BASE}?dcity=lax&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        match, details = _flight_match(agent, gt)
+        assert match is False
+        assert any("Departure city" in m for m in details["mismatches"])
+
+    def test_wrong_arrival_city(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        agent = f"{FLIGHT_BASE}?dcity=nyc&acity=tyo&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        match, details = _flight_match(agent, gt)
+        assert match is False
+        assert any("Arrival city" in m for m in details["mismatches"])
+
+    def test_wrong_departure_date(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=ow&class=y&quantity=1"
+        agent = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-11&flighttype=ow&class=y&quantity=1"
+        match, details = _flight_match(agent, gt)
+        assert match is False
+        assert any("Departure date" in m for m in details["mismatches"])
+
+    def test_wrong_return_date(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&rdate=2026-04-17&flighttype=rt&class=y&quantity=1"
+        agent = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&rdate=2026-04-20&flighttype=rt&class=y&quantity=1"
+        match, details = _flight_match(agent, gt)
+        assert match is False
+        assert any("Return date" in m for m in details["mismatches"])
+
+    def test_missing_return_date(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&rdate=2026-04-17&flighttype=rt&class=y&quantity=1"
+        agent = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        match, details = _flight_match(agent, gt)
+        assert match is False
+        assert any("Return date missing" in m for m in details["mismatches"])
+
+    def test_wrong_flight_type(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        agent = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=ow&class=y&quantity=1"
+        match, details = _flight_match(agent, gt)
+        assert match is False
+        assert any("Flight type" in m for m in details["mismatches"])
+
+    def test_wrong_cabin_class(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=ow&class=y&quantity=1"
+        agent = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=ow&class=c&quantity=1"
+        match, details = _flight_match(agent, gt)
+        assert match is False
+        assert any("Cabin class" in m for m in details["mismatches"])
+
+    def test_wrong_quantity(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=ow&class=y&quantity=1"
+        agent = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=ow&class=y&quantity=3"
+        match, details = _flight_match(agent, gt)
+        assert match is False
+        assert any("Passengers" in m for m in details["mismatches"])
+
+    def test_missing_departure_city(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=ow&class=y&quantity=1"
+        agent = f"{FLIGHT_BASE}?acity=lon&ddate=2026-04-10&flighttype=ow&class=y&quantity=1"
+        match, details = _flight_match(agent, gt)
+        assert match is False
+        assert any("Departure city missing" in m for m in details["mismatches"])
+
+    def test_missing_arrival_city(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&ddate=2026-04-10&flighttype=ow&class=y&quantity=1"
+        agent = f"{FLIGHT_BASE}?dcity=nyc&ddate=2026-04-10&flighttype=ow&class=y&quantity=1"
+        # GT also missing acity → both empty → match (no comparison needed)
+        match, _ = _flight_match(agent, gt)
+        assert match is True
+
+    def test_case_insensitive_city_match(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        agent = f"{FLIGHT_BASE}?dcity=NYC&acity=LON&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        match, _ = _flight_match(agent, gt)
+        assert match is True
+
+    def test_one_way_no_rdate_match(self):
+        """One-way flights have no return date — should match when both lack it."""
+        gt = f"{FLIGHT_BASE}?dcity=lax&acity=tyo&ddate=2026-05-01&flighttype=ow&class=y&quantity=2"
+        agent = f"{FLIGHT_BASE}?dcity=lax&acity=tyo&ddate=2026-05-01&flighttype=ow&class=y&quantity=2"
+        match, _ = _flight_match(agent, gt)
+        assert match is True
+
+
+# ─────────────────────────────────────────────────────────────
+# 19. Flight Verifier Async Lifecycle
+# ─────────────────────────────────────────────────────────────
+
+class TestFlightVerifierAsync:
+    """Test TripFlightUrlMatch update/compute/reset async lifecycle."""
+
+    @pytest.mark.asyncio
+    async def test_flight_exact_match_scores_1(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&rdate=2026-04-17&flighttype=rt&class=y&quantity=1"
+        v = TripFlightUrlMatch(gt_url=gt)
+        await v.update(url=gt)
+        result = await v.compute()
+        assert result.score == 1.0
+
+    @pytest.mark.asyncio
+    async def test_flight_no_match_scores_0(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        agent = f"{FLIGHT_BASE}?dcity=lax&acity=tyo&ddate=2026-05-01&flighttype=ow&class=c&quantity=3"
+        v = TripFlightUrlMatch(gt_url=gt)
+        await v.update(url=agent)
+        result = await v.compute()
+        assert result.score == 0.0
+
+    @pytest.mark.asyncio
+    async def test_flight_reset_clears_state(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        v = TripFlightUrlMatch(gt_url=gt)
+        await v.update(url=gt)
+        result = await v.compute()
+        assert result.score == 1.0
+
+        await v.reset()
+        result = await v.compute()
+        assert result.score == 0.0
+
+    @pytest.mark.asyncio
+    async def test_flight_non_trip_url_ignored(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        v = TripFlightUrlMatch(gt_url=gt)
+        await v.update(url="https://www.google.com/flights?q=nyc+to+london")
+        result = await v.compute()
+        assert result.score == 0.0
+
+    @pytest.mark.asyncio
+    async def test_flight_hotel_url_ignored(self):
+        """Hotel URL on trip.com should be ignored (no /flights/ in path)."""
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        v = TripFlightUrlMatch(gt_url=gt)
+        await v.update(url=f"{BASE}?cityId=633&cityName=New%20York")
+        result = await v.compute()
+        assert result.score == 0.0
+
+    @pytest.mark.asyncio
+    async def test_flight_empty_url_ignored(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        v = TripFlightUrlMatch(gt_url=gt)
+        await v.update(url="")
+        result = await v.compute()
+        assert result.score == 0.0
+
+    @pytest.mark.asyncio
+    async def test_flight_first_match_sticks(self):
+        """Verifier should keep the first matching URL."""
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        v = TripFlightUrlMatch(gt_url=gt)
+        await v.update(url=gt)
+        # Second update with wrong URL — should be ignored
+        wrong = f"{FLIGHT_BASE}?dcity=lax&acity=tyo&ddate=2026-05-01&flighttype=ow&class=c&quantity=3"
+        await v.update(url=wrong)
+        result = await v.compute()
+        assert result.score == 1.0
+
+    @pytest.mark.asyncio
+    async def test_flight_compute_detailed(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&rdate=2026-04-17&flighttype=rt&class=y&quantity=1"
+        v = TripFlightUrlMatch(gt_url=gt)
+        await v.update(url=gt)
+        result = await v.compute_detailed()
+        assert isinstance(result, FlightVerifierResult)
+        assert result.score == 1.0
+        assert result.match is True
+        assert result.agent_url == gt
+        assert result.gt_url == gt
+
+
+# ─────────────────────────────────────────────────────────────
+# 20. Flight Domain Variations
+# ─────────────────────────────────────────────────────────────
+
+class TestFlightDomainVariations:
+    """Test domain validation for flight URLs."""
+
+    @pytest.mark.asyncio
+    async def test_uk_trip_domain(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        agent = gt.replace("us.trip.com", "uk.trip.com")
+        v = TripFlightUrlMatch(gt_url=gt)
+        await v.update(url=agent)
+        result = await v.compute()
+        assert result.score == 1.0
+
+    @pytest.mark.asyncio
+    async def test_sg_trip_domain(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        agent = gt.replace("us.trip.com", "sg.trip.com")
+        v = TripFlightUrlMatch(gt_url=gt)
+        await v.update(url=agent)
+        result = await v.compute()
+        assert result.score == 1.0
+
+    @pytest.mark.asyncio
+    async def test_non_trip_domain_rejected(self):
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        agent = "https://www.expedia.com/flights/showfarefirst?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=rt&class=y&quantity=1"
+        v = TripFlightUrlMatch(gt_url=gt)
+        await v.update(url=agent)
+        result = await v.compute()
+        assert result.score == 0.0
+
+
+# ─────────────────────────────────────────────────────────────
+# 21. Flight CSV Self-Match
+# ─────────────────────────────────────────────────────────────
+
+class TestFlightCSVSelfMatch:
+    """Verify all flight GT URLs in the CSV self-match."""
+
+    def test_all_flight_gt_urls_self_match(self):
+        import csv
+        import json
+        import os
+
+        csv_path = os.path.join(
+            os.path.dirname(__file__),
+            "..", "..", "navi_bench", "trip", "trip_benchmark_tasks.csv"
+        )
+        if not os.path.exists(csv_path):
+            pytest.skip("CSV file not found")
+
+        with open(csv_path, encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+
+        failures = []
+        flight_count = 0
+        for i, row in enumerate(rows):
+            config = json.loads(row["task_generation_config_json"])
+            target = config.get("_target_", "")
+            if "flight" not in target:
+                continue
+            flight_count += 1
+            gt_urls = config.get("gt_url", [])
+            for gt_url in gt_urls:
+                v = TripFlightUrlMatch(gt_url=gt_url)
+                matched, details = v._urls_match(gt_url, gt_url)
+                if not matched:
+                    failures.append(f"Row {i} ({row['task_id']}): {gt_url}")
+
+        assert flight_count > 0, "No flight tasks found in CSV"
+        assert failures == [], f"Flight self-match failures:\n" + "\n".join(failures)
+
+    def test_flight_task_config_instantiation(self):
+        """Verify all flight tasks can be instantiated via generate_task_config."""
+        import csv
+        import json
+        import os
+
+        from navi_bench.base import instantiate
+
+        csv_path = os.path.join(
+            os.path.dirname(__file__),
+            "..", "..", "navi_bench", "trip", "trip_benchmark_tasks.csv"
+        )
+        if not os.path.exists(csv_path):
+            pytest.skip("CSV file not found")
+
+        with open(csv_path, encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+
+        failures = []
+        for i, row in enumerate(rows):
+            config = json.loads(row["task_generation_config_json"])
+            if "flight" not in config.get("_target_", ""):
+                continue
+            try:
+                task_config = instantiate(config)
+                assert task_config.task, f"Row {i}: empty rendered task"
+                assert task_config.url, f"Row {i}: empty start URL"
+            except Exception as e:
+                failures.append(f"Row {i} ({row['task_id']}): {e}")
+
+        assert failures == [], f"Flight instantiation failures:\n" + "\n".join(failures)
