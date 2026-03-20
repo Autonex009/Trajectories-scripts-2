@@ -417,7 +417,6 @@ class SeatGeekInfoGathering(BaseMetric):
         logger.info(f"Computing with {len(self._navigation_stack)} pages in navigation stack")
         
         # ========== WALK BACKWARDS THROUGH STACK ==========
-        event_listing_found = False
         category_page_infos: list[InfoDict] = []
         
         for page_visit in reversed(self._navigation_stack):
@@ -425,8 +424,7 @@ class SeatGeekInfoGathering(BaseMetric):
             page_url = page_visit["url"]
             page_infos = page_visit["infos"]
             
-            if page_type == "event_listing" and not event_listing_found:
-                event_listing_found = True
+            if page_type == "event_listing":
                 logger.info(f"Found event_listing in stack: {page_url[:80]}...")
                 
                 for i, alternative_conditions in enumerate(self.queries):
@@ -445,8 +443,6 @@ class SeatGeekInfoGathering(BaseMetric):
                             event_name = info.get("eventName", "?")
                             city = info.get("city", "?")
                             logger.info(f"Event '{event_name}' (city={city}) did NOT match query {i}")
-                
-                break
             
             elif page_type in ["performer", "category", "search"]:
                 category_page_infos.extend(page_infos)
@@ -922,6 +918,10 @@ def generate_task_config_deterministic(
 
     # Render {placeholder} tokens in task text
     rendered_task = render_task_statement(task, resolved_placeholders)
+
+    # Deep copy queries to avoid mutating the caller's data
+    import copy
+    queries = copy.deepcopy(queries)
 
     # Inject resolved dates into query "dates" fields that are placeholder strings
     for placeholder_key, (_, dates) in resolved_placeholders.items():
