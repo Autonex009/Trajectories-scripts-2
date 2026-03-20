@@ -173,11 +173,23 @@
         try {
             const path = new URL(url).pathname;
             const segments = path.split('/').filter(Boolean);
-            // Category is the second-to-last segment in event URLs
+            
+            // Event URL with category explicitly in path: /team-tickets/venue/category/id
             if (segments.length >= 4) {
                 return segments[segments.length - 2];
             }
-            // For category pages, extract from the slug
+            
+            // 3-segment event URL: /team-tickets/venue/id
+            if (segments.length === 3 && segments[0].endsWith('-tickets')) {
+                return segments[0].replace('-tickets', '');
+            }
+            
+            // 2-segment city-scoped performer URL: /city/team-tickets
+            if (segments.length === 2 && segments[1].endsWith('-tickets')) {
+                return segments[1].replace('-tickets', '');
+            }
+            
+            // For category/performer pages, extract from the slug
             if (segments.length === 1) {
                 return segments[0].replace('-tickets', '');
             }

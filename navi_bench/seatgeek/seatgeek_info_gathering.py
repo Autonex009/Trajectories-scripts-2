@@ -585,9 +585,14 @@ class SeatGeekInfoGathering(BaseMetric):
 
         # Check exact ticket quantities
         if ticket_quantities := query.get("ticket_quantities"):
-            ticket_count = info.get("ticketCount")
-            if ticket_count is not None and ticket_count not in ticket_quantities:
-                return False
+            available_quantities = info.get("availableQuantities")
+            if available_quantities is not None:
+                if not any(q in available_quantities for q in ticket_quantities):
+                    return False
+            else:
+                ticket_count = info.get("ticketCount")
+                if ticket_count is not None and ticket_count not in ticket_quantities:
+                    return False
 
         # Check maximum price — using cascading fallback:
         # LD+JSON lowPrice → DOM listing low → individual listing price
