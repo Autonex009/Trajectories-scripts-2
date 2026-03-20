@@ -212,50 +212,6 @@ class FinalResult(BaseModel):
     is_query_covered: list[bool]
 
 
-# ==================== DATE HELPER FUNCTIONS ====================
-
-
-def get_next_weekend_dates() -> list[str]:
-    """Get dates for the next weekend (Saturday and Sunday)."""
-    today = datetime.now()
-    days_until_saturday = (5 - today.weekday()) % 7
-    if days_until_saturday == 0:
-        days_until_saturday = 7
-    
-    saturday = today + timedelta(days=days_until_saturday)
-    sunday = saturday + timedelta(days=1)
-    
-    return [
-        saturday.strftime("%Y-%m-%d"),
-        sunday.strftime("%Y-%m-%d")
-    ]
-
-
-def get_upcoming_weekday(weekday_name: str) -> str:
-    """Get date for the next occurrence of a weekday.
-    
-    Args:
-        weekday_name: Full weekday name (e.g., "Friday", "Saturday")
-    
-    Returns:
-        Date string in YYYY-MM-DD format.
-    """
-    weekday_map = {
-        "Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
-        "Friday": 4, "Saturday": 5, "Sunday": 6
-    }
-    
-    target_day = weekday_map[weekday_name]
-    today = datetime.now()
-    days_ahead = (target_day - today.weekday()) % 7
-    
-    if days_ahead == 0:
-        days_ahead = 7
-    
-    target_date = today + timedelta(days=days_ahead)
-    return target_date.strftime("%Y-%m-%d")
-
-
 # ==================== MAIN VERIFIER CLASS ====================
 
 
@@ -346,7 +302,6 @@ class SeatGeekInfoGathering(BaseMetric):
         
         # Track existing pages
         for page in context.pages:
-            import asyncio
             asyncio.create_task(track_page(page))
         
         # Track new pages (tabs/popups)
@@ -779,10 +734,9 @@ class SeatGeekInfoGathering(BaseMetric):
         if is_sold_out:
             if require_available:
                 # User explicitly requires available tickets — reject sold-out
-                if query_dates:
-                    if info.get("date") in query_dates:
-                        evidences.append(info)
-                        return False
+                # Append as evidence if it matches the dates (or if no dates required)
+                if not query_dates or info.get("date") in query_dates:
+                    evidences.append(info)
                 return False
             else:
                 # require_available is False (default) — ACCEPT sold-out events!
