@@ -884,7 +884,7 @@ class TestCSVSelfMatch:
 
         csv_path = os.path.join(
             os.path.dirname(__file__),
-            "..", "..", "navi_bench", "trip", "trip_benchmark_tasks.csv"
+            "..", "..", "data", "trip", "trip_task_pairs.csv"
         )
         if not os.path.exists(csv_path):
             pytest.skip("CSV file not found")
@@ -914,7 +914,7 @@ class TestCSVSelfMatch:
 
         csv_path = os.path.join(
             os.path.dirname(__file__),
-            "..", "..", "navi_bench", "trip", "trip_benchmark_tasks.csv"
+            "..", "..", "data", "trip", "trip_task_pairs.csv"
         )
         if not os.path.exists(csv_path):
             pytest.skip("CSV file not found")
@@ -1288,7 +1288,7 @@ class TestFlightCSVSelfMatch:
 
         csv_path = os.path.join(
             os.path.dirname(__file__),
-            "..", "..", "navi_bench", "trip", "trip_benchmark_tasks.csv"
+            "..", "..", "data", "trip", "trip_task_pairs.csv"
         )
         if not os.path.exists(csv_path):
             pytest.skip("CSV file not found")
@@ -1324,7 +1324,7 @@ class TestFlightCSVSelfMatch:
 
         csv_path = os.path.join(
             os.path.dirname(__file__),
-            "..", "..", "navi_bench", "trip", "trip_benchmark_tasks.csv"
+            "..", "..", "data", "trip", "trip_task_pairs.csv"
         )
         if not os.path.exists(csv_path):
             pytest.skip("CSV file not found")
