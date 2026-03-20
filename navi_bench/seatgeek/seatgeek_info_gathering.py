@@ -646,13 +646,14 @@ class SeatGeekInfoGathering(BaseMetric):
                 return False
 
         # Check minimum price
-        # P-6 FIX: Use same fallback chain as max_price: lowPrice → listingLowPrice → price
+        # KARAN BUG FIX: Use highPrice fallback chain for min_price
+        # We want to know if ANY ticket is above min_price, so check the HIGHEST priced ticket
         if (min_price := query.get("min_price")) is not None:
-            low_price = info.get("lowPrice")
-            listing_low = info.get("listingLowPrice")
+            high_price = info.get("highPrice")
+            listing_high = info.get("listingHighPrice")
             price = info.get("price")
-            cheapest = low_price if low_price is not None else (listing_low if listing_low is not None else price)
-            if cheapest is not None and cheapest < min_price:
+            priciest = high_price if high_price is not None else (listing_high if listing_high is not None else price)
+            if priciest is not None and priciest < min_price:
                 return False
 
         # Check sections using EXACT matching

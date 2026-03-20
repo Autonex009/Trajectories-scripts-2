@@ -864,16 +864,16 @@ class TestSecondAuditRegressions:
 
     # --- P-6: min_price fallback chain ---
 
-    def test_min_price_listing_low_fallback(self):
-        """P-6: min_price should use listingLowPrice when lowPrice and price absent."""
+    def test_min_price_listing_high_fallback(self):
+        """P-6: min_price should use listingHighPrice when highPrice and price absent."""
         query = {"event_names": ["lakers"], "min_price": 100}
-        info = {"eventName": "lakers", "listingLowPrice": 50, "info": "available"}
+        info = {"eventName": "lakers", "listingHighPrice": 50, "info": "available"}
         assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is False
 
-    def test_min_price_low_price_fallback(self):
-        """T-5: min_price should use lowPrice fallback."""
+    def test_min_price_high_price_fallback(self):
+        """T-5: min_price should use highPrice fallback."""
         query = {"event_names": ["lakers"], "min_price": 100}
-        info = {"eventName": "lakers", "lowPrice": 50, "info": "available"}
+        info = {"eventName": "lakers", "highPrice": 50, "info": "available"}
         assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is False
 
     def test_min_price_low_price_above_passes(self):
