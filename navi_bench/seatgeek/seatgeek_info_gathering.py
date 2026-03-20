@@ -497,21 +497,23 @@ class SeatGeekInfoGathering(BaseMetric):
                 category_page_infos.extend(page_infos)
         
         # ========== FALLBACK: Check performer/category pages ==========
-        if not event_listing_found and category_page_infos:
-            logger.info(f"No event_listing found, falling back to {len(category_page_infos)} infos from other pages")
-            
-            for i, alternative_conditions in enumerate(self.queries):
-                if self._is_query_covered[i]:
-                    continue
+        if category_page_infos:
+            unmatched_count = sum(1 for covered in self._is_query_covered if not covered)
+            if unmatched_count > 0:
+                logger.info(f"Falling back to {len(category_page_infos)} infos from other pages for {unmatched_count} unmatched queries")
                 
-                for info in category_page_infos:
-                    if self._check_alternative_conditions(i, alternative_conditions, info):
-                        logger.info(
-                            f"SeatGeekInfoGathering.compute: Query {i} MATCHED on fallback page: "
-                            f"{info.get('eventName')}"
-                        )
-                        self._is_query_covered[i] = True
-                        break
+                for i, alternative_conditions in enumerate(self.queries):
+                    if self._is_query_covered[i]:
+                        continue
+                    
+                    for info in category_page_infos:
+                        if self._check_alternative_conditions(i, alternative_conditions, info):
+                            logger.info(
+                                f"SeatGeekInfoGathering.compute: Query {i} MATCHED on fallback page: "
+                                f"{info.get('eventName')}"
+                            )
+                            self._is_query_covered[i] = True
+                            break
         
         # ========== Check exhausted queries (sold-out handling) ==========
         for i, alternative_conditions in enumerate(self.queries):
