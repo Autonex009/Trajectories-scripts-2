@@ -267,7 +267,12 @@ class TripFlightUrlMatch(BaseMetric):
 
             # 5. Flight type (rt / ow)
             if gt_parts["flighttype"]:
-                if agent_parts["flighttype"] and agent_parts["flighttype"] != gt_parts["flighttype"]:
+                if not agent_parts["flighttype"]:
+                    details["mismatches"].append(
+                        f"Flight type missing (expected '{gt_parts['flighttype']}')"
+                    )
+                    return False, details
+                if agent_parts["flighttype"] != gt_parts["flighttype"]:
                     details["mismatches"].append(
                         f"Flight type: '{agent_parts['flighttype']}' vs '{gt_parts['flighttype']}'"
                     )
@@ -275,7 +280,12 @@ class TripFlightUrlMatch(BaseMetric):
 
             # 6. Cabin class
             if gt_parts["class"]:
-                if agent_parts["class"] and agent_parts["class"] != gt_parts["class"]:
+                if not agent_parts["class"]:
+                    details["mismatches"].append(
+                        f"Cabin class missing (expected '{gt_parts['class']}')"
+                    )
+                    return False, details
+                if agent_parts["class"] != gt_parts["class"]:
                     details["mismatches"].append(
                         f"Cabin class: '{agent_parts['class']}' vs '{gt_parts['class']}'"
                     )
@@ -283,7 +293,12 @@ class TripFlightUrlMatch(BaseMetric):
 
             # 7. Passengers
             if gt_parts["quantity"]:
-                if agent_parts["quantity"] and agent_parts["quantity"] != gt_parts["quantity"]:
+                if not agent_parts["quantity"]:
+                    details["mismatches"].append(
+                        f"Passengers missing (expected '{gt_parts['quantity']}')"
+                    )
+                    return False, details
+                if agent_parts["quantity"] != gt_parts["quantity"]:
                     details["mismatches"].append(
                         f"Passengers: '{agent_parts['quantity']}' vs '{gt_parts['quantity']}'"
                     )

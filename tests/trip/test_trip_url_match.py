@@ -1126,6 +1126,31 @@ class TestFlightURLMatching:
         agent = f"{FLIGHT_BASE}?dcity=lax&acity=tyo&ddate=2026-05-01&flighttype=ow&class=y&quantity=2"
         match, _ = _flight_match(agent, gt)
         assert match is True
+    def test_missing_flighttype_fails(self):
+        """Agent omitting flighttype when GT requires it — was false positive, now correctly fails."""
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&rdate=2026-04-17&flighttype=rt&class=y&quantity=1"
+        agent = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&rdate=2026-04-17&class=y&quantity=1"
+        match, details = _flight_match(agent, gt)
+        assert match is False
+        assert any("Flight type missing" in m for m in details["mismatches"])
+
+    def test_missing_class_fails(self):
+        """Agent omitting cabin class when GT requires it — was false positive, now correctly fails."""
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=ow&class=c&quantity=1"
+        agent = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=ow&quantity=1"
+        match, details = _flight_match(agent, gt)
+        assert match is False
+        assert any("Cabin class missing" in m for m in details["mismatches"])
+
+    def test_missing_quantity_fails(self):
+        """Agent omitting quantity when GT requires it — was false positive, now correctly fails."""
+        gt = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=ow&class=y&quantity=3"
+        agent = f"{FLIGHT_BASE}?dcity=nyc&acity=lon&ddate=2026-04-10&flighttype=ow&class=y"
+        match, details = _flight_match(agent, gt)
+        assert match is False
+        assert any("Passengers missing" in m for m in details["mismatches"])
+
+
 
 
 # ─────────────────────────────────────────────────────────────
