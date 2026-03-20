@@ -729,8 +729,11 @@ class SeatGeekInfoGathering(BaseMetric):
         
         require_available = query.get("require_available", False)
         
-        available_info = info.get("info", "").lower()
-        is_sold_out = "sold_out" in available_info or "unavailable" in available_info
+        # BUG 5 FIX: Use the same field access as availability_statuses filter
+        # to prevent divergence between the two checks
+        available_info = info.get("availabilityStatus", info.get("info", "")).lower()
+        # BUG 4 FIX: Also detect cancelled and rescheduled as unavailable
+        is_sold_out = any(s in available_info for s in ("sold_out", "unavailable", "cancelled", "rescheduled"))
         
         if is_sold_out:
             if require_available:
