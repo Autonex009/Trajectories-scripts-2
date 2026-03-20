@@ -547,10 +547,17 @@ class TestTicketQuantity:
         info_match_2 = {"eventName": "lakers", "ticketCount": 2, "info": "available"}
         info_match_4 = {"eventName": "lakers", "ticketCount": 4, "info": "available"}
         info_no_match = {"eventName": "lakers", "ticketCount": 3, "info": "available"}
+        info_range_match = {
+            "eventName": "lakers", 
+            "ticketCount": 6, 
+            "availableQuantities": [2, 4, 6], 
+            "info": "available"
+        }
 
         assert SeatGeekInfoGathering._check_multi_candidate_query(query, info_match_2, []) is True
         assert SeatGeekInfoGathering._check_multi_candidate_query(query, info_match_4, []) is True
         assert SeatGeekInfoGathering._check_multi_candidate_query(query, info_no_match, []) is False
+        assert SeatGeekInfoGathering._check_multi_candidate_query(query, info_range_match, []) is True
 
 
 # ==================== AISLE SEAT & SECTION FILTERS ====================
