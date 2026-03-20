@@ -25,7 +25,7 @@ def main():
     # ─────────────────────────────────────────────────
     # STEP 1: Load a task from the CSV
     # ─────────────────────────────────────────────────
-    csv_path = r"navi_bench/trip/trip_benchmark_tasks.csv"
+    csv_path = r"data/trip/trip_task_pairs.csv"
     with open(csv_path, encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
 
