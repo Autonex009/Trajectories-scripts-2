@@ -903,10 +903,10 @@ class TestSecondAuditRegressions:
         info = {"eventName": "lakers", "highPrice": 50, "info": "available"}
         assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is False
 
-    def test_min_price_low_price_above_passes(self):
-        """T-5: min_price should pass when lowPrice is above min."""
+    def test_min_price_high_price_above_passes(self):
+        """T-5: min_price should pass when highPrice is above min."""
         query = {"event_names": ["lakers"], "min_price": 100}
-        info = {"eventName": "lakers", "lowPrice": 150, "info": "available"}
+        info = {"eventName": "lakers", "highPrice": 150, "info": "available"}
         assert SeatGeekInfoGathering._check_multi_candidate_query(query, info, []) is True
 
     # --- T-6: accessible_seating with empty/missing urlPerks ---
