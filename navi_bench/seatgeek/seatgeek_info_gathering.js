@@ -494,7 +494,7 @@
             const num = parseInt(m.match(/(\d+)/)[1]);
             if (num > maxCount) maxCount = num;
         });
-        return maxCount || null;
+        return maxCount !== undefined ? maxCount : null;
     }
 
     // ==================== FILTER STATE EXTRACTION ====================
