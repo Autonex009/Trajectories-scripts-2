@@ -214,6 +214,16 @@ class FinalResult(BaseModel):
 
 # ==================== MAIN VERIFIER CLASS ====================
 
+import re as _re
+
+def _word_boundary_match(query_term: str, candidates: list[str]) -> bool:
+    """Return True if query_term matches any candidate as a whole word.
+
+    Uses regex \\b word boundaries so "nba" does not match "wnba",
+    "la" does not match "dallas", etc.
+    """
+    pattern = _re.compile(r'\b' + _re.escape(query_term) + r'\b')
+    return any(pattern.search(c) for c in candidates if c)
 
 @beartype
 class SeatGeekInfoGathering(BaseMetric):
@@ -519,25 +529,26 @@ class SeatGeekInfoGathering(BaseMetric):
             if not any(qname in name for qname in query_names for name in all_names):
                 return False
 
-        # Check event categories
+        # Check event categories using word-boundary matching
+        # so "nba" does not match "wnba"
         if query_categories := query.get("event_categories"):
             query_categories = [c.lower() for c in query_categories]
             event_category = info.get("eventCategory", "").lower()
             event_type = info.get("eventType", "").lower()
             category = info.get("category", "").lower()
             all_categories = [event_category, event_type, category]
-            
-            if not any(c in cat for c in query_categories for cat in all_categories if cat):
+
+            if not any(_word_boundary_match(c, all_categories) for c in query_categories):
                 return False
 
-        # Check domain (alias for event_categories)
+        # Check domain (alias for event_categories) with word-boundary matching
         if query_domain := query.get("domain"):
             query_domain = [d.lower() for d in query_domain]
             event_category = info.get("eventCategory", "").lower()
             category = info.get("category", "").lower()
             all_categories = [event_category, category]
-            
-            if not any(d in cat for d in query_domain for cat in all_categories if cat):
+
+            if not any(_word_boundary_match(d, all_categories) for d in query_domain):
                 return False
 
         # Check venues using SUBSTRING matching
@@ -550,18 +561,18 @@ class SeatGeekInfoGathering(BaseMetric):
             if not any(v in venue for v in venues):
                 return False
 
-        # Check cities using SUBSTRING matching
-        # IMPORTANT: If query requires cities, info MUST have a city to match
+        # Check cities using word-boundary matching
+        # FIX: "la" must not match "dallas", "new york" must match substring within "new york city"
         if cities := query.get("cities"):
             cities = [c.lower() for c in cities]
             city = (info.get("city") or "").lower()
             url_city = (info.get("urlCity") or "").lower().replace("-", " ")
             all_cities = [city, url_city]
-            
+
             # Must have at least one non-empty city source
             if not any(ci for ci in all_cities):
                 return False
-            if not any(c in ci for c in cities for ci in all_cities if ci):
+            if not any(_word_boundary_match(c, all_cities) for c in cities):
                 return False
 
         # ========== TICKET LISTING FILTERS ==========
@@ -640,17 +651,14 @@ class SeatGeekInfoGathering(BaseMetric):
 
         # ========== TICKET TYPE FILTERS ==========
 
-        # Check ticket types
+        # Check ticket types using word-boundary matching
+        # FIX: "vip" must not match "kvip-area"
         if ticket_types := query.get("ticket_types"):
             ticket_types = [t.lower() for t in ticket_types]
-            # SeatGeek doesn't have explicit ticket type field,
-            # but we can check listing tags and event category
             listing_tags = [t.lower() for t in info.get("listingTags", [])]
             available_tags = [t.lower() for t in info.get("availableTags", [])]
             all_tags = listing_tags + available_tags
-            # P-3 FIX: Remove `if all_tags` guard — when ticket_types is required
-            # but no tag data exists, the match should FAIL, not silently pass.
-            if not any(t in tag for t in ticket_types for tag in all_tags):
+            if not any(_word_boundary_match(t, all_tags) for t in ticket_types):
                 return False
 
         # Check accessible seating requirement
@@ -678,15 +686,14 @@ class SeatGeekInfoGathering(BaseMetric):
             if deal_score is not None and deal_score < deal_score_min:
                 return False
 
-        # Check listing tags
-        # P-2 FIX: Remove `if all_tags` guard — when listing_tags is required
-        # but no tag data exists, the match should FAIL, not silently pass.
+        # Check listing tags using word-boundary matching
+        # FIX: "floor" must not match "dancefloor"
         if required_tags := query.get("listing_tags"):
             required_tags = [t.lower() for t in required_tags]
             listing_tags = [t.lower() for t in info.get("listingTags", [])]
             available_tags = [t.lower() for t in info.get("availableTags", [])]
             all_tags = listing_tags + available_tags
-            if not any(t in tag for t in required_tags for tag in all_tags):
+            if not any(_word_boundary_match(t, all_tags) for t in required_tags):
                 return False
 
         # ========== URL-BASED VERIFICATION ==========
@@ -739,8 +746,16 @@ class SeatGeekInfoGathering(BaseMetric):
         is_sold_out = any(s in available_info for s in ("sold_out", "unavailable"))
 
         if is_cancelled:
-            # Cancelled/rescheduled events are not valid matches under any circumstance
-            return False
+            # Cancelled/rescheduled events are not valid under any circumstance
+            # UNLESS the caller explicitly listed the status in availability_statuses
+            # (e.g. a task that specifically asks to find a cancelled event)
+            explicitly_allowed = False
+            if av_statuses := query.get("availability_statuses"):
+                av_statuses_lower = [s.lower() for s in av_statuses]
+                if available_info in av_statuses_lower:
+                    explicitly_allowed = True
+            if not explicitly_allowed:
+                return False
 
         if is_sold_out:
             if require_available:
