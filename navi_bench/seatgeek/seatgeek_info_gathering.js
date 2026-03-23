@@ -533,11 +533,12 @@
             }
         });
 
-        // Sort order from "Sort by deal" or similar dropdown
+        // Sort order from "Sort by Deal Score" or similar dropdown
+        // BUG FIX: use (.+?) instead of (\w+) to capture multi-word sort labels
         const sortText = document.body ? document.body.innerText : '';
-        const sortMatch = sortText.match(/Sort by\s+(\w+)/i);
+        const sortMatch = sortText.match(/Sort by\s+(.+?)$/im);
         if (sortMatch) {
-            state.sortOrder = sortMatch[1].toLowerCase();
+            state.sortOrder = sortMatch[1].trim().toLowerCase();
         }
 
         // Price filter — check if price pill is active or has custom range

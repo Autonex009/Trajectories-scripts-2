@@ -729,12 +729,19 @@ class SeatGeekInfoGathering(BaseMetric):
         
         require_available = query.get("require_available", False)
         
-        # BUG 5 FIX: Use the same field access as availability_statuses filter
-        # to prevent divergence between the two checks
+        # Read availability from unified field (BUG 5 FIX: same as availability_statuses filter)
         available_info = info.get("availabilityStatus", info.get("info", "")).lower()
-        # BUG 4 FIX: Also detect cancelled and rescheduled as unavailable
-        is_sold_out = any(s in available_info for s in ("sold_out", "unavailable", "cancelled", "rescheduled"))
-        
+
+        # BUG 6 FIX: Separate semantically different unavailability types:
+        # - sold_out / unavailable: event exists but no tickets — accept when require_available=False
+        # - cancelled / rescheduled: event is not happening — ALWAYS reject
+        is_cancelled = any(s in available_info for s in ("cancelled", "rescheduled"))
+        is_sold_out = any(s in available_info for s in ("sold_out", "unavailable"))
+
+        if is_cancelled:
+            # Cancelled/rescheduled events are not valid matches under any circumstance
+            return False
+
         if is_sold_out:
             if require_available:
                 # User explicitly requires available tickets — reject sold-out
@@ -742,11 +749,11 @@ class SeatGeekInfoGathering(BaseMetric):
                 if not query_dates or info.get("date") in query_dates:
                     evidences.append(info)
                 return False
-            # require_available is False (default) — ACCEPT sold-out events!
+            # require_available is False (default) — ACCEPT sold-out events.
+            # The agent found the correct event; it just has no remaining tickets.
             # Fall through to shared date/time checks below.
 
-        # Shared date/time validation for both sold-out (require_available=False)
-        # and available events
+        # Shared date/time validation for available and sold-out (require_available=False) events
         if query_dates:
             if info.get("date") not in query_dates:
                 return False
