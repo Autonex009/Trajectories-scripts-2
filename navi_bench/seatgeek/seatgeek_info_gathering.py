@@ -9,6 +9,8 @@ Modeled after the StubHub verifier with a 3-layer extraction pipeline:
 3. DOM scraping (ticket listings via aria-label, filter state, listing tags)
 """
 
+import asyncio
+import copy
 import functools
 import itertools
 import random
@@ -214,15 +216,13 @@ class FinalResult(BaseModel):
 
 # ==================== MAIN VERIFIER CLASS ====================
 
-import re as _re
-
 def _word_boundary_match(query_term: str, candidates: list[str]) -> bool:
     """Return True if query_term matches any candidate as a whole word.
 
     Uses regex \\b word boundaries so "nba" does not match "wnba",
-    "la" does not match "dallas", etc.
+    "la" does not match "dallas", "heat" does not match "theater", etc.
     """
-    pattern = _re.compile(r'\b' + _re.escape(query_term) + r'\b')
+    pattern = re.compile(r'\b' + re.escape(query_term) + r'\b')
     return any(pattern.search(c) for c in candidates if c)
 
 @beartype
@@ -287,7 +287,6 @@ class SeatGeekInfoGathering(BaseMetric):
         Args:
             context: Playwright BrowserContext to attach tracking to
         """
-        import asyncio
         
         async def track_page(page) -> None:
             """Attach navigation tracking to a single page."""
@@ -517,16 +516,17 @@ class SeatGeekInfoGathering(BaseMetric):
         
         # ========== EVENT SEARCH FILTERS ==========
         
-        # Check event names using SUBSTRING matching
+        # Check event names using word-boundary matching
         # SeatGeek advantage: also checks competitors[] and performers[] from LD+JSON
+        # FIX: "heat" must not match "theater", "la" must not match "atlantic"
         if query_names := query.get("event_names"):
             query_names = [name.lower() for name in query_names]
             event_name = info.get("eventName", "").lower()
             competitors = [c.lower() for c in info.get("competitors", [])]
             performers = [p.lower() for p in info.get("performers", [])]
             all_names = [event_name] + competitors + performers
-            
-            if not any(qname in name for qname in query_names for name in all_names):
+
+            if not any(_word_boundary_match(qname, all_names) for qname in query_names):
                 return False
 
         # Check event categories using word-boundary matching
@@ -742,8 +742,11 @@ class SeatGeekInfoGathering(BaseMetric):
         # BUG 6 FIX: Separate semantically different unavailability types:
         # - sold_out / unavailable: event exists but no tickets — accept when require_available=False
         # - cancelled / rescheduled: event is not happening — ALWAYS reject
-        is_cancelled = any(s in available_info for s in ("cancelled", "rescheduled"))
-        is_sold_out = any(s in available_info for s in ("sold_out", "unavailable"))
+        # Use exact word matching by splitting on underscores to avoid
+        # 'cancelled' matching a hypothetical 'uncancelled' substring.
+        available_info_words = set(available_info.replace("-", "_").split("_"))
+        is_cancelled = bool(available_info_words & {"cancelled", "rescheduled"})
+        is_sold_out = bool(available_info_words & {"sold", "unavailable"})
 
         if is_cancelled:
             # Cancelled/rescheduled events are not valid under any circumstance
@@ -782,7 +785,7 @@ class SeatGeekInfoGathering(BaseMetric):
         """Check if single-candidate query matches the info."""
         if (query_name := query.get("event_name")) is not None:
             event_name = info.get("eventName", "").lower()
-            if query_name.lower() not in event_name:
+            if not _word_boundary_match(query_name.lower(), [event_name]):
                 return False
 
         if (query_venue := query.get("venue")) is not None:
@@ -790,7 +793,8 @@ class SeatGeekInfoGathering(BaseMetric):
                 return False
 
         if (query_city := query.get("city")) is not None:
-            if query_city.lower() not in (info.get("city") or "").lower():
+            city = (info.get("city") or "").lower()
+            if not _word_boundary_match(query_city.lower(), [city]):
                 return False
 
         if (query_date := query.get("date")) is not None:
@@ -939,7 +943,6 @@ def generate_task_config_deterministic(
     rendered_task = render_task_statement(task, resolved_placeholders)
 
     # Deep copy queries to avoid mutating the caller's data
-    import copy
     queries = copy.deepcopy(queries)
 
     # Inject resolved dates into query "dates" fields that are placeholder strings
