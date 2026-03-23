@@ -531,12 +531,13 @@ class SeatGeekInfoGathering(BaseMetric):
 
         # Check event categories using word-boundary matching
         # so "nba" does not match "wnba"
+        # NOTE: eventType (e.g. "SportsEvent" → "sportsevent") is intentionally excluded
+        # because word-boundary regex can never match inside a CamelCase-collapsed string.
         if query_categories := query.get("event_categories"):
             query_categories = [c.lower() for c in query_categories]
             event_category = info.get("eventCategory", "").lower()
-            event_type = info.get("eventType", "").lower()
             category = info.get("category", "").lower()
-            all_categories = [event_category, event_type, category]
+            all_categories = [event_category, category]
 
             if not any(_word_boundary_match(c, all_categories) for c in query_categories):
                 return False
