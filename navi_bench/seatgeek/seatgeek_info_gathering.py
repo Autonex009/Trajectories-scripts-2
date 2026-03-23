@@ -742,24 +742,18 @@ class SeatGeekInfoGathering(BaseMetric):
                 if not query_dates or info.get("date") in query_dates:
                     evidences.append(info)
                 return False
-            else:
-                # require_available is False (default) — ACCEPT sold-out events!
-                # Agent found the correct event, so they get full credit
-                if query_dates:
-                    if info.get("date") not in query_dates:
-                        return False
-                if query_times:
-                    if info.get("time") not in query_times:
-                        return False
-                return True
-        else:
-            if query_dates:
-                if info.get("date") not in query_dates:
-                    return False
-            if query_times:
-                if info.get("time") not in query_times:
-                    return False
-            return True
+            # require_available is False (default) — ACCEPT sold-out events!
+            # Fall through to shared date/time checks below.
+
+        # Shared date/time validation for both sold-out (require_available=False)
+        # and available events
+        if query_dates:
+            if info.get("date") not in query_dates:
+                return False
+        if query_times:
+            if info.get("time") not in query_times:
+                return False
+        return True
 
     @classmethod
     def _check_single_candidate_query(cls, query: SingleCandidateQuery, info: InfoDict) -> bool:
