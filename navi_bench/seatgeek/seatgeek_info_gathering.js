@@ -23,14 +23,7 @@
         return el ? el.textContent.trim() : '';
     }
 
-    /**
-     * Safely get all text matches from querySelectorAll.
-     */
-    function getAllText(selector) {
-        return Array.from(document.querySelectorAll(selector))
-            .map(el => el.textContent.trim())
-            .filter(Boolean);
-    }
+
 
     /**
      * Safely get attribute value from a selector.
