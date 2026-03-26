@@ -287,9 +287,38 @@ class VividSeatsInfoGathering(BaseMetric):
         if require_available := query.get("require_available", False):
             if info.get("availabilityStatus", "available") == "sold_out": return False
 
-        # Dates
+        # Dates (Includes fallback for Discovery/Search pages)
         if q_dates := query.get("dates"):
-            if info.get("date") not in q_dates: return False
+            info_date = info.get("date")
+            
+            # Helper function to check if the query date is satisfied by the UI Date Range filter
+            def is_date_satisfied():
+                if info_date in q_dates:
+                    return True
+                
+                # Fallback to UI Filter Date Range (e.g. "Mar 3 - Apr 30, 2026")
+                filter_date = info.get("filterDate") or info.get("filterDateRange")
+                if filter_date:
+                    range_match = re.search(r'(\w+\s+\d+).*?(\w+\s+\d+,\s*\d{4})', filter_date)
+                    if range_match:
+                        from datetime import datetime
+                        try:
+                            year = datetime.now().year
+                            range_start = datetime.strptime(range_match.group(1) + f" {year}", "%b %d %Y")
+                            range_end = datetime.strptime(range_match.group(2).replace(',', ''), "%b %d %Y")
+                            for q_date in q_dates:
+                                try:
+                                    qd = datetime.strptime(q_date, "%Y-%m-%d")
+                                    if range_start <= qd <= range_end:
+                                        return True
+                                except ValueError:
+                                    continue
+                        except ValueError:
+                            pass
+                return False
+            
+            if not is_date_satisfied():
+                return False
         
         # Zones [FIXED: Checks both per-ticket zone and global filter]
         if q_zones := query.get("zones"):

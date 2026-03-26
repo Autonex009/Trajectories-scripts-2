@@ -399,11 +399,15 @@
                     finalTime = meta.globalTime;
                 }
                 
-                // If it's an ld+json source and it lacks city specificity, attempt to pull the DOM city
+                // Aggressively pull the DOM city for ld+json sources to avoid "Suburb" mismatches (e.g., Addison vs Dallas)
                 let finalCity = item.city;
-                if (item.source === "ld+json" && !finalCity) {
-                   const domCityNode = document.querySelector('[data-testid="event-location"]');
-                   if(domCityNode) finalCity = getText(domCityNode).split(',')[0].trim().toLowerCase();
+                if (item.source === "ld+json") {
+                   const domCityNode = document.querySelector('[data-testid="event-location"], .event-location-text');
+                   if (domCityNode) {
+                       const parsedDomCity = getText(domCityNode).split(',')[0].trim().toLowerCase();
+                       // If the DOM city exists, use it instead of the JSON-LD suburb
+                       if (parsedDomCity) finalCity = parsedDomCity;
+                   }
                 }
 
                 results.push({
