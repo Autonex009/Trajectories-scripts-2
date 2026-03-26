@@ -8,7 +8,6 @@
     // ============================================================================
     const getText = (el) => {
         if (!el) return null;
-        // Prefer innerText to preserve visual spaces between squashed div/span tags
         let text = el.innerText || el.textContent || '';
         return text.trim().replace(/\s+/g, ' ');
     };
@@ -31,7 +30,6 @@
         price: (text) => {
             try {
                 if (!text) return null;
-                // Vivid Seats often shows "$150 / ea" or just "$150"
                 let match = text.match(/(?:[$£€₹]|USD)\s*([\d,]+(?:\.\d{2})?)/i);
                 if (match) return parseFloat(match[1].replace(/,/g, ""));
             } catch (e) { return null; }
@@ -47,15 +45,37 @@
             try {
                 if (!text) return null;
                 const clean = text.toLowerCase().trim();
+                
+                // 1. Match full ISO dates (e.g., 2026-04-19)
                 let match = clean.match(/(\d{4})-(\d{2})-(\d{2})/);
                 if (match) return match[0];
-                // Vivid Seats format: "Oct 24, 2026" or "Sat, Oct 24"
+                
+                // 2. Match dates WITH a year (e.g., Oct 24, 2026)
                 match = clean.match(/([a-z]{3})[a-z]*\s+(\d{1,2}),?\s*(\d{4})/i);
+                const months = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+                
                 if (match) {
-                    const months = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
                     const m = months[match[1].substring(0, 3)];
                     if (m) return `${match[3]}-${String(m).padStart(2,'0')}-${match[2].padStart(2,'0')}`;
                 }
+
+                // 3. FIX: Match dates WITHOUT a year (e.g., Sun, Apr 19 at 5:00pm)
+                // We will infer the year. If the month has already passed in the current year, assume next year.
+                match = clean.match(/([a-z]{3})[a-z]*\s+(\d{1,2})/i);
+                if (match) {
+                    const m = months[match[1].substring(0, 3)];
+                    if (m) {
+                        const today = new Date();
+                        let targetYear = today.getFullYear();
+                        
+                        // If the parsed month is earlier than the current month, assume it's next year
+                        if (m < (today.getMonth() + 1)) {
+                            targetYear++;
+                        }
+                        return `${targetYear}-${String(m).padStart(2,'0')}-${match[2].padStart(2,'0')}`;
+                    }
+                }
+
             } catch (e) { return null; }
             return null;
         },
@@ -80,14 +100,12 @@
     const Enrichment = {
         pageType: () => {
             if (url.includes('/checkout') || url.includes('/secure/')) return 'checkout';
-            // Vivid Seats event pages typically use /production/
             if (url.includes('/production/')) return 'event_listing'; 
             if (url.includes('/search') || url.includes('?query=')) return 'search_results';
             if (url.includes('/concerts/') || url.includes('/theater/') || url.includes('/sports/')) return 'event_category';
             return 'other';
         },
         antiBotStatus: () => {
-            // Vivid Seats relies heavily on Cloudflare & PerimeterX/DataDome
             if (pageText.includes('just a moment') || document.querySelector('#challenge-running')) return 'blocked_cloudflare';
             if (pageText.includes('pardon the interruption') || document.querySelector('#px-captcha')) return 'blocked_perimeterx';
             return 'clear';
@@ -119,7 +137,6 @@
                 let filterDate = null;
                 let activeZones = [];
 
-                // 1. Grab Quantity from the active filter button
                 const qtyBtn = document.querySelector('[data-testid="show-quantity-filter-button"], [data-testid="Quantity-filter-button"]');
                 if (qtyBtn) {
                     const qtyText = getText(qtyBtn);
@@ -127,58 +144,41 @@
                     if (qtyMatch) filterQuantity = parseInt(qtyMatch[1]);
                 }
 
-                // 2. Grab Min and Max Price from the active price button
                 const priceBtn = document.querySelector('[data-testid="show-price-filter-button"], [data-testid="Price-filter-button"]');
                 if (priceBtn) {
                     const priceText = getText(priceBtn);
                     if (priceText) {
-                        // Extract all dollar amounts in the string
                         const priceMatches = [...priceText.matchAll(/[$£€₹]?\s*([\d,]+(?:\.\d{2})?)/g)];
-                        if (priceMatches.length >= 1) {
-                            filterMinPrice = parseFloat(priceMatches[0][1].replace(/,/g, ''));
-                        }
-                        if (priceMatches.length >= 2) {
-                            filterMaxPrice = parseFloat(priceMatches[1][1].replace(/,/g, ''));
-                        }
+                        if (priceMatches.length >= 1) filterMinPrice = parseFloat(priceMatches[0][1].replace(/,/g, ''));
+                        if (priceMatches.length >= 2) filterMaxPrice = parseFloat(priceMatches[1][1].replace(/,/g, ''));
                     }
                 }
                 
-                // 3. "Tickets under X" Quick Filter (General Listing Page)
                 const underXBtn = document.querySelector('[data-testid="tickets-under-x-filter-button"]');
-                // Only use this if standard max price isn't already set, and check if it's not just a default label
                 if (underXBtn && !filterMaxPrice) { 
                     const underXText = getText(underXBtn);
                     if (underXText && underXText.toLowerCase().includes('under')) {
                         const match = underXText.match(/[$£€₹]?\s*([\d,]+(?:\.\d{2})?)/);
-                        // Make sure the button is actually active (Vivid removes 'MuiChip-outlined' when active)
                         const isOutlined = underXBtn.className.includes('MuiChip-outlined');
-                        if (match && !isOutlined) {
-                            filterMaxPrice = parseFloat(match[1].replace(/,/g, ''));
-                        }
+                        if (match && !isOutlined) filterMaxPrice = parseFloat(match[1].replace(/,/g, ''));
                     }
                 }
 
-                // 4. Date Filter (General Listing Page)
                 const dateFilterBtn = document.querySelector('[data-testid="date-filter-button"]');
                 if (dateFilterBtn) {
                     const dateText = getText(dateFilterBtn);
-                    // If it says exactly "Date", the user hasn't selected a specific date yet
                     if (dateText && dateText.toLowerCase() !== 'date') {
                         filterDate = Parsers.date(dateText) || dateText;
                     }
                 }
 
-                // 5. Super Seller Toggle
                 const superSellerToggle = document.querySelector('[data-testid="super-seller-toggle"]');
                 const isSuperSellerOnly = superSellerToggle ? superSellerToggle.getAttribute('aria-checked') === 'true' : false;
 
-                // 6. Zone Filters (e.g. "Upper Level", "Club Level")
                 const zoneBtns = document.querySelectorAll('[data-testid="zone-chip-container"] button');
                 zoneBtns.forEach(btn => {
-                    // Look for the 'activated' substring in the class name
                     const isActivated = btn.className.includes('activated');
                     const isDisabled = btn.disabled || btn.className.includes('Mui-disabled');
-                    
                     if (isActivated && !isDisabled) {
                         const zoneText = getText(btn);
                         if (zoneText) activeZones.push(zoneText.toLowerCase());
@@ -191,7 +191,7 @@
                     filterMaxPrice: filterMaxPrice,
                     filterSuperSeller: isSuperSellerOnly,
                     filterDate: filterDate,
-                    filterZones: activeZones // Ensure this is always returned
+                    filterZones: activeZones
                 };
             } catch (e) { 
                 console.error("Error parsing filters", e);
@@ -231,26 +231,20 @@
         ticketListings: () => {
             const collected = [];
             
-            // Extract Event Title and Venue from header
             const headerTitleNode = document.querySelector('[data-testid="production-detail-bar-performer-link"], h1, [data-testid="event-title"]');
             const eventNameContext = headerTitleNode ? getText(headerTitleNode).trim() : "";
 
-            // Extract City/Location from header
             const locationElement = document.querySelector('[data-testid="event-location"], .event-location-text');
             let cityField = "";
             if (locationElement) {
                 const locText = getText(locationElement);
-                if (locText) {
-                    cityField = locText.split(',')[0].trim();
-                }
+                if (locText) cityField = locText.split(',')[0].trim();
             }
 
-            // Target the specific ticket rows
             const rows = document.querySelectorAll('div[data-rowid], [data-testid="listing-row-container"] > div, [data-testid="listing-card"], .listing-item, li[data-ticket-id]');
 
             rows.forEach(row => {
                 try {
-                    // 1. Get Price
                     const dataPrice = row.getAttribute('data-price');
                     const priceNode = row.querySelector('[data-testid="listing-price"], .ticket-price');
                     const rawPrice = dataPrice || (priceNode ? getText(priceNode) : getText(row));
@@ -258,7 +252,6 @@
 
                     if (!extractedPrice) return;
 
-                    // 2. Get Quantity
                     const qtyElement = row.querySelector('[data-testid="listing-quantity"], .ticket-quantity');
                     let qtyVal = 1;
                     if (qtyElement) {
@@ -266,7 +259,6 @@
                         qtyVal = parseInt(qtyText, 10) || 1;
                     }
 
-                    // 3. Section, Zone, and Row Logic
                     let sectionText = "";
                     let rowText = "";
                     let zoneText = "";
@@ -274,56 +266,36 @@
                     const seatingElement = row.querySelector('[data-testid="listing-seating"], .seating-info, [class*="sectionContent"] [class*="MuiTypography"], [class*="styles_sectionColumn"] [class*="styles_nowrap"]');
                     const seatInfo = seatingElement ? getText(seatingElement).toLowerCase() : getText(row).toLowerCase();
 
-                    // Parse Zone
-                    if (seatInfo.includes('zone:')) {
-                        zoneText = seatInfo.split('zone:')[1].split('|')[0].trim();
-                    }
+                    if (seatInfo.includes('zone:')) zoneText = seatInfo.split('zone:')[1].split('|')[0].trim();
 
-                    // Parse Section
-                    if (seatInfo.includes('sec:')) {
-                        sectionText = seatInfo.split('sec:')[1].split('|')[0].trim();
-                    } else if (seatInfo.includes('section')) {
-                        sectionText = seatInfo.split('section')[1].split(',')[0].trim();
-                    } else {
-                        // Fallback section parsing
+                    if (seatInfo.includes('sec:')) sectionText = seatInfo.split('sec:')[1].split('|')[0].trim();
+                    else if (seatInfo.includes('section')) sectionText = seatInfo.split('section')[1].split(',')[0].trim();
+                    else {
                         sectionText = extractByPattern(getText(row), {s: /(?:\bSection\b|\bSec\b|Zone)\s+([A-Za-z0-9\s]+?)(?=\s*(?:[•·,:-]|\bRow\b|$))/i}) || "";
-                        if(!sectionText && seatingElement && !seatInfo.includes('row')) {
-                           sectionText = seatInfo.split(',')[0].trim();
-                        }
+                        if(!sectionText && seatingElement && !seatInfo.includes('row')) sectionText = seatInfo.split(',')[0].trim();
                     }
 
-                    // Parse Row specifically to handle the edge cases
                     const dataRow = row.getAttribute('data-rowid');
                     const rowNode = row.querySelector('[data-testid="row"]');
                     
-                    if (dataRow) {
-                         rowText = dataRow;
-                    } else if (rowNode) {
-                         rowText = getText(rowNode).replace(/Row/i, '').trim();
-                    } else if (seatInfo.includes('row:')) {
-                        rowText = seatInfo.split('row:')[1].split('|')[0].trim();
-                    } else if (seatInfo.includes('row')) {
-                        rowText = seatInfo.split('row')[1].split('|')[0].trim();
-                    } else {
-                        rowText = extractByPattern(getText(row), {r: /\bRow\s+([A-Za-z0-9]+)/i}) || "";
-                    }
+                    if (dataRow) rowText = dataRow;
+                    else if (rowNode) rowText = getText(rowNode).replace(/Row/i, '').trim();
+                    else if (seatInfo.includes('row:')) rowText = seatInfo.split('row:')[1].split('|')[0].trim();
+                    else if (seatInfo.includes('row')) rowText = seatInfo.split('row')[1].split('|')[0].trim();
+                    else rowText = extractByPattern(getText(row), {r: /\bRow\s+([A-Za-z0-9]+)/i}) || "";
                     
-                    // Clean up row text to just alphanumeric chars to match testing expectations
-                    if(rowText) {
-                        rowText = rowText.replace(/[^a-z0-9]/gi, '');
-                    }
+                    if(rowText) rowText = rowText.replace(/[^a-z0-9]/gi, '');
 
-                    // 4. Check for Super Seller
                     const isSuperSeller = row.querySelector('[class*="superSellerIcon"], [class*="ticket-super-seller"], [data-testid="super-seller-badge"], img[alt*="Super Seller"]') !== null || Enrichment.isSuperSeller(getText(row));
 
                     collected.push({
                         source: "dom_ticket_listing",
-                        eventName: eventNameContext.toLowerCase(), // Venue is contained here
+                        eventName: eventNameContext.toLowerCase(), 
                         city: cityField.toLowerCase(),
                         price: extractedPrice,
                         ticketCount: qtyVal,
                         section: sectionText,
-                        zone: zoneText || sectionText, // Map zone to section if explicit zone missing
+                        zone: zoneText || sectionText, 
                         row: rowText,
                         isSuperSeller: isSuperSeller,
                         availabilityStatus: 'available',
@@ -337,37 +309,27 @@
 
         eventCards: () => {
             const collected = [];
-            // Target the specific production row links
             const rows = document.querySelectorAll('a[data-testid^="production-listing-row-"]');
             
             rows.forEach(row => {
                 try {
                     const href = row.getAttribute('href');
-                    
-                    // 1. Get Event Name
                     const titleNode = row.querySelector('.styles_titleColumn__T_Kfd > span:first-child, [class*="titleTruncate"]');
                     const eventName = titleNode ? getText(titleNode) : null;
-                    
-                    // 2. Get Date & Time
                     const dateTimeNode = row.querySelector('[data-testid="date-time-left-element"]');
-                    const rawDateText = dateTimeNode ? getText(dateTimeNode) : null; // e.g., "Fri Apr 10 7:00pm"
-                    
-                    // 3. Get Venue & City
+                    const rawDateText = dateTimeNode ? getText(dateTimeNode) : null; 
                     const subtitleNode = row.querySelector('[data-testid="subtitle"]');
-                    const locationText = subtitleNode ? getText(subtitleNode) : null; // e.g., "Allegiant Stadium • Las Vegas, NV"
-                    
-                    // 4. Get Price
+                    const locationText = subtitleNode ? getText(subtitleNode) : null; 
                     const priceNode = row.querySelector('[data-testid="lead-in-price-mobile"], button');
-                    const priceText = priceNode ? getText(priceNode) : null; // e.g., "From $271"
+                    const priceText = priceNode ? getText(priceNode) : null; 
                     
-                    // Create a clean info string for debugging
                     const info = [rawDateText, eventName, locationText, priceText].filter(Boolean).join(" | ");
 
                     if (eventName) {
                         collected.push({
                             source: "dom_event_card",
                             url: href || url,
-                            eventName: eventName.toLowerCase() + (locationText ? ` - ${locationText.toLowerCase()}` : ""), // Append venue to eventName
+                            eventName: eventName.toLowerCase() + (locationText ? ` - ${locationText.toLowerCase()}` : ""), 
                             date: Parsers.date(rawDateText) || Parsers.date(href), 
                             time: Parsers.time(rawDateText),
                             price: Parsers.price(priceText),
@@ -393,20 +355,23 @@
         const filters = Scraper.pageFilters();
 
         if (scraped.length === 0) {
-            // Fallback for search/discovery pages when no specific listings render
             const headerTitleNode = document.querySelector('h1') || document.querySelector('[data-testid="event-title"]');
-            
             scraped.push({
                 source: "fallback_metadata",
                 url: url,
                 eventName: headerTitleNode ? getText(headerTitleNode).toLowerCase() : 'unknown',
-                filterDateRange: filters.filterDate, // Pass active date filter down
+                filterDateRange: filters.filterDate, 
                 info: "No specific elements found. Check antiBot state or search page."
             });
         }
 
-        const globalDate = Parsers.date(pageText);
-        const globalTime = Parsers.time(pageText);
+        // FIX: Extract global Date and time but allow it to infer the current year
+        // We look specifically at the header area where the date is displayed "Sun, Apr 19 at 5:00pm"
+        let globalDateNode = document.querySelector('[data-testid="event-date"], .event-date-text') || document.querySelector('h1')?.nextElementSibling;
+        let globalDateText = globalDateNode ? getText(globalDateNode) : pageText;
+        
+        const globalDate = Parsers.date(globalDateText);
+        const globalTime = Parsers.time(globalDateText);
 
         const meta = {
             pageType: Enrichment.pageType(),
@@ -415,7 +380,7 @@
             globalStatus: Enrichment.status(pageText),
             globalDate: globalDate,
             globalTime: globalTime,
-            filterLocation: filters.filterLocation, // For discovery page city matching
+            filterLocation: filters.filterLocation, 
             ...filters
         };
 
@@ -425,17 +390,27 @@
             if (!seen.has(key)) {
                 seen.add(key);
                 
+                // Merge JSON-LD dates and DOM cities so neither fails
+                // If the DOM item is missing a date, give it the global date
                 let finalDate = item.date;
                 let finalTime = item.time;
                 if (!finalDate && meta.pageType === 'event_listing') {
                     finalDate = meta.globalDate;
                     finalTime = meta.globalTime;
                 }
+                
+                // If it's an ld+json source and it lacks city specificity, attempt to pull the DOM city
+                let finalCity = item.city;
+                if (item.source === "ld+json" && !finalCity) {
+                   const domCityNode = document.querySelector('[data-testid="event-location"]');
+                   if(domCityNode) finalCity = getText(domCityNode).split(',')[0].trim().toLowerCase();
+                }
 
                 results.push({
                     ...item,
-                    ...meta, // Spread global filters into the output dict
+                    ...meta, 
                     date: finalDate,
+                    city: finalCity,
                     parsedTime: Parsers.time(finalTime || ''),
                     availabilityStatus: item.availabilityStatus || meta.globalStatus,
                     isSuperSeller: item.isSuperSeller !== undefined ? item.isSuperSeller : Enrichment.isSuperSeller(item.info),
