@@ -5,6 +5,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 from beartype import beartype
 from loguru import logger
 from pydantic import BaseModel
+from datetime import datetime
+from itertools import product
 
 from navi_bench.base import BaseMetric, BaseTaskConfig, get_import_path
 from navi_bench.dates import (
@@ -12,7 +14,6 @@ from navi_bench.dates import (
     initialize_user_metadata,
     render_task_statement,
 )
-
 
 class InputDict(TypedDict, total=False):
     url: str
@@ -50,6 +51,9 @@ class BookingUrlMatch(BaseMetric):
         self._matched_gt_url = ""
         self._match_details: dict = {}
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(gt_urls={self.gt_urls})"
+
     async def reset(self) -> None:
         self._found_match = False
         self._agent_url = ""
@@ -66,7 +70,7 @@ class BookingUrlMatch(BaseMetric):
         parsed = urlparse(url.strip())
         domain = (parsed.hostname or "").lower()
 
-        if domain and not self._is_valid_booking_domain(domain):
+        if not domain or not self._is_valid_booking_domain(domain):
             logger.debug(f"Ignoring non-Booking.com URL: {url}")
             return
 
@@ -84,6 +88,9 @@ class BookingUrlMatch(BaseMetric):
                 self._match_details = details
                 return
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(gt_urls={self.gt_urls})"
+    
     async def compute(self) -> FinalResult:
         return FinalResult(score=1.0 if self._found_match else 0.0)
 
@@ -102,6 +109,8 @@ class BookingUrlMatch(BaseMetric):
 
     @staticmethod
     def _is_valid_booking_domain(domain: str) -> bool:
+        if not domain:
+            return False
         domain = domain.lower()
         return domain == "booking.com" or domain.endswith(".booking.com")
 
@@ -110,7 +119,9 @@ class BookingUrlMatch(BaseMetric):
     # =================================================================
 
     def _urls_match(self, agent_url: str, gt_url: str) -> tuple[bool, dict]:
-        gt_path = urlparse(gt_url).path.lower()
+        parsed_gt = urlparse(gt_url)
+        gt_path = (parsed_gt.path or "").lower()
+        gt_host = (parsed_gt.hostname or "").lower()
 
         # Flights flow
         if "flights" in gt_path:
@@ -121,7 +132,7 @@ class BookingUrlMatch(BaseMetric):
             return self._hotel_urls_match(agent_url, gt_url)
         
         # Car-rental flow
-        if "cars.booking.com" in gt_url or "search-results" in gt_path:
+        if gt_host.startswith("cars.booking.com"):
             return self._cars_urls_match(agent_url, gt_url)
 
         return False, {"mismatches": ["Unknown GT URL type"]}
@@ -178,16 +189,16 @@ class BookingUrlMatch(BaseMetric):
                         "mismatches": [f"ages: {agent['ages']} vs {gt['ages']}"]
                     }
 
-            # Price min & Price max  
-            if gt.get("price_min") is not None:
-                if agent.get("price_min") is None or agent["price_min"] < gt["price_min"]:
-                    return False, {"mismatches": [f"price_min: {agent['price_min']} < {gt['price_min']}"]}
+            # 5. Price
+            if gt["price_min"] is not None:
+                if agent["price_min"] != gt["price_min"]:
+                    return False, {"mismatches": ["price_min mismatch"]}
 
-            if gt.get("price_max") is not None:
-                if agent.get("price_max") is None or agent["price_max"] > gt["price_max"]:
-                    return False, {"mismatches": [f"price_max: {agent['price_max']} > {gt['price_max']}"]}
+            if gt["price_max"] is not None:
+                if agent["price_max"] != gt["price_max"]:
+                    return False, {"mismatches": ["price_max mismatch"]}
 
-            # 5. Filters
+            # 6. Filters
             match, filter_details = self._compare_filters(
                 agent["filters"], gt["filters"]
             )
@@ -202,7 +213,7 @@ class BookingUrlMatch(BaseMetric):
             return False, {"mismatches": [str(e)]}
 
     #****************FLIGHTS URL MATCH************************
-    def _flights_urls_match(self, agent_url: str, gt_url: str):
+    def _flights_urls_match(self, agent_url: str, gt_url: str)-> tuple[bool, dict]:
         agent = self._parse_flights_url(agent_url)
         gt = self._parse_flights_url(gt_url)
 
@@ -237,7 +248,7 @@ class BookingUrlMatch(BaseMetric):
         if gt["cabin_class"] and agent["cabin_class"] != gt["cabin_class"]:
             mismatches.append("cabin_class mismatch")
 
-        # 6. Sorting (optional but useful)
+        # 6. Sorting 
         if gt["sort"] and agent["sort"] != gt["sort"]:
             mismatches.append("sort mismatch")
 
@@ -252,7 +263,7 @@ class BookingUrlMatch(BaseMetric):
         return True, {}
     
     #****************CARS URL MATCH************************
-    def _cars_urls_match(self, agent_url: str, gt_url: str):
+    def _cars_urls_match(self, agent_url: str, gt_url: str) -> tuple[bool, dict]:
         agent = self._parse_cars_url(agent_url)
         gt = self._parse_cars_url(gt_url)
 
@@ -289,7 +300,7 @@ class BookingUrlMatch(BaseMetric):
             "price_max": None,
         }
 
-        # Destination (robust)
+        # Destination 
         raw_dest = unquote(self._get_param(query, "ss")).lower()
         result["destination"] = raw_dest.split(",")[0].strip()
 
@@ -306,7 +317,7 @@ class BookingUrlMatch(BaseMetric):
         if "age" in query:
             result["ages"] = [a for a in query["age"] if a]
 
-        # Filters (decoded)
+        # Filters 
         nflt = self._get_param(query, "nflt")        
         if nflt:
             nflt = unquote(nflt)
@@ -340,7 +351,7 @@ class BookingUrlMatch(BaseMetric):
             "arrTimeInt": "",
         }
 
-        # Core route (prefer query over path)
+        # Core route 
         result["origin"] = self._get_param(query, "from").lower()
         result["destination"] = self._get_param(query, "to").lower()
 
@@ -445,21 +456,33 @@ class BookingUrlMatch(BaseMetric):
 
         return filters
 
+
     def _compare_filters(self, agent_filters, gt_filters):
+        mismatches = []
+
         for key, gt_values in gt_filters.items():
+            if key == "price":
+             continue
 
             if key not in agent_filters:
-                return False, {"mismatches": [f"Missing filter: {key}"]}
+                mismatches.append(f"Missing filter: {key}")
+                continue
 
-            # allow extra filters in agent
-            if not gt_values.issubset(agent_filters[key]):
-                return False, {
-                    "mismatches": [
-                        f"{key}: {agent_filters[key]} does not include {gt_values}"
-                    ]
-                }
+            agent_values = agent_filters[key]
 
-        return True, {}
+            # Handle multi-value GT filters (dates, etc.)
+            if isinstance(gt_values, list):
+                if not any(v in gt_values for v in agent_values):
+                    mismatches.append(
+                        f"{key}: {agent_values} does not include any of {gt_values}"
+                    )
+            else:
+                if not gt_values.issubset(agent_values):
+                    mismatches.append(
+                        f"{key}: {agent_values} does not include {gt_values}"
+                    )
+
+        return (False, {"mismatches": mismatches}) if mismatches else (True, {})
 
     @staticmethod
     def _get_param(query: dict, key: str) -> str:
@@ -482,24 +505,8 @@ def generate_task_config(
     url: str = "https://www.booking.com",
     values: dict[str, str] | None = None,
 ) -> BaseTaskConfig:
-    """Generate task configuration for Booking.com URL matching.
+    """Generate task configuration for Booking.com URL matching with multi-date + derived placeholder support."""
 
-    Accepts either ``gt_url`` (list of strings) or ``ground_truth_url``
-    (single string) so that the function works both when called from
-    ``instantiate()`` via benchmark CSV and when called directly.
-
-    Args:
-        task: Task description.  May contain ``{placeholder}`` tokens.
-        location: User location string.
-        timezone: IANA timezone string.
-        gt_url: Ground-truth URL(s).
-        ground_truth_url: Single GT URL (alternative to gt_url).
-        timestamp: Unix timestamp.  ``None`` means "now".
-        url: Starting URL.
-        values: Placeholder-key → relative-date expression mapping.
-                Resolved dates are substituted into *task* text and
-                into ``gt_url`` strings (replacing ``{placeholder}`` tokens).
-    """
     # Resolve gt_url from either parameter
     if gt_url is None and ground_truth_url is not None:
         gt_url = [ground_truth_url]
@@ -512,21 +519,64 @@ def generate_task_config(
     user_metadata = initialize_user_metadata(timezone, location, timestamp)
     resolved_placeholders, _ = initialize_placeholder_map(user_metadata, values)
 
-    # Render {placeholder} tokens in task text
     rendered_task = render_task_statement(task, resolved_placeholders)
 
-    # Substitute resolved dates into gt_url strings
-    rendered_gt_urls: list[str] = []
-    for u in gt_url:
-        rendered_u = u
-        for placeholder_key, (_, dates) in resolved_placeholders.items():
-            template = "{" + placeholder_key + "}"
-            if template in rendered_u and dates:
-                rendered_u = rendered_u.replace(template, dates[0])
-        rendered_gt_urls.append(rendered_u)
+    # ----------------------------
+    # Generate all GT URL combinations
+    # ----------------------------
+    all_gt_urls: list[str] = []
+
+    for template in gt_url:
+        placeholders_in_template = {
+            k: dates
+            for k, (_, dates) in resolved_placeholders.items()
+            if any(token in template for token in [
+                f"{{{k}}}",
+                f"{{{k}Day}}",
+                f"{{{k}Month}}",
+                f"{{{k}Year}}",
+            ])
+        }
+
+        if not placeholders_in_template:
+            all_gt_urls.append(template)
+            continue
+
+        keys = list(placeholders_in_template.keys())
+        date_lists = list(placeholders_in_template.values())
+
+        for combination in product(*date_lists):
+            rendered_u = template
+
+            for k, v in zip(keys, combination):
+                rendered_u = rendered_u.replace(f"{{{k}}}", v)
+
+                try:
+                    dt = datetime.strptime(v, "%Y-%m-%d")
+                    replacements = {
+                        f"{{{k}Day}}": str(dt.day),
+                        f"{{{k}Month}}": str(dt.month),
+                        f"{{{k}Year}}": str(dt.year),
+                    }
+                    for token, value in replacements.items():
+                        if token in rendered_u:
+                            rendered_u = rendered_u.replace(token, value)
+                except Exception:
+                    pass
+
+            all_gt_urls.append(rendered_u)
+
+    all_gt_urls = list(set(all_gt_urls))
 
     eval_target = get_import_path(BookingUrlMatch)
-    eval_config = {"_target_": eval_target, "gt_url": rendered_gt_urls}
+    eval_config = {"_target_": eval_target, "gt_url": all_gt_urls}
+
+    resolved_placeholders: dict[str, list[str]] | None = None
+
     return BaseTaskConfig(
-        url=url, task=rendered_task, user_metadata=user_metadata, eval_config=eval_config
+        url=url,
+        task=rendered_task,
+        user_metadata=user_metadata,
+        eval_config=eval_config,
+        resolved_placeholders=resolved_placeholders,
     )

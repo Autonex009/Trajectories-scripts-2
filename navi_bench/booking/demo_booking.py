@@ -64,25 +64,6 @@ class TaskScenario:
         assert self.task_id
         assert self.gt_url
 
-def resolve_dates(values):
-    resolved = {}
-
-    pattern = re.compile(r"now\(\)\s*\+\s*timedelta\((\d+)\)")
-
-    for key, expr in values.items():
-        expr_clean = expr.strip("{}").strip()
-
-        match = pattern.fullmatch(expr_clean)
-        if not match:
-            raise ValueError(f"Invalid date expression: {expr}")
-
-        days = int(match.group(1))
-        dt = datetime.now() + timedelta(days=days)
-
-        resolved[key] = dt
-
-    return resolved
-
 def print_resolved_task(task_config, resolved_gt_url):
     resolved_placeholders = getattr(task_config.user_metadata, "placeholders", {})
 
@@ -100,8 +81,9 @@ def print_resolved_task(task_config, resolved_gt_url):
         for key, (desc, dates) in resolved_placeholders.items():
             print(f"  {key}: {dates}")
 
-    print("\nResolved GT URL:")
-    print(f"  {resolved_gt_url}")
+    print("\nResolved GT URLs:")
+    for url in resolved_gt_url:
+        print(f"  {url}")
 
     print("=" * 60 + "\n")
 
@@ -125,7 +107,7 @@ SCENARIOS: list[TaskScenario] = [
             "&group_adults=2"
             "&no_rooms=1"
             "&group_children=0"
-            "&nflt=class%3D5%3Bmealplan%3D1%3Bfc%3D2"
+            "&nflt=mealplan%3D1%3Bclass%3D5%3Bfc%3D2"
         ],
         values={
             "checkinDate": "{now() + timedelta(7)}",
@@ -166,7 +148,7 @@ SCENARIOS: list[TaskScenario] = [
         location="New York, USA",
         timezone="America/New_York",
         gt_url=[
-            "https://www.booking.com/searchresults.en-gb.html?"
+            "https://www.booking.com/searchresults.html?"
             "ss=New+York"
             "&checkin={checkinDate}&checkout={checkoutDate}"
             "&group_adults=2&no_rooms=1&group_children=0"
@@ -364,6 +346,29 @@ SCENARIOS: list[TaskScenario] = [
             "departureDate": "{now() + timedelta(22)}",
         },
     ),
+    TaskScenario(
+        task_id="booking/flights/mumbai_to_paris/business_onestop",
+        name="Mumbai to Paris - Business Class 1 Stop",
+        task=(
+            "Search for a one-way flight from Mumbai to Paris on {departureDate}, "
+            "for 1 adult in business class with 1 stop."
+        ),
+        url="https://www.booking.com/flights",
+        location="Mumbai, India",
+        timezone="Asia/Kolkata",
+        gt_url=[
+            "https://www.booking.com/flights/results/?"
+            "from=BOM.CITY&to=PAR.CITY"
+            "&type=ONEWAY"
+            "&depart={departureDate}"
+            "&adults=1"
+            "&cabinClass=BUSINESS"
+            "&stops=1"
+        ],
+        values={
+            "departureDate": "Saturdays in next month",
+        },
+    ),
     #---------------------CARS TASKSCENARIOS----------------------
     TaskScenario(
         task_id="booking/cars/paris/economy",
@@ -440,7 +445,7 @@ SCENARIOS: list[TaskScenario] = [
         name="New York Car Rental - Intermediate Manual",
         task=(
             "Search for an intermediate car in New York from {puDate} to {doDate}, "
-            "Include manual transmission and air conditioning"
+            "Include automatic transmission and air conditioning"
         ),
         url="https://cars.booking.com",
         location="New York, USA",
@@ -578,24 +583,8 @@ async def run_scenario(scenario: TaskScenario) -> dict:
             values=scenario.values,
         )
 
-        resolved_gt_url = task_config.eval_config["gt_url"][0]
+        resolved_gt_url = task_config.eval_config["gt_url"]
 
-        # Special handling for cars
-        if "booking/cars" in scenario.task_id:
-            resolved_dates = resolve_dates(scenario.values)
-
-            pu_date = resolved_dates.get("puDate")
-            do_date = resolved_dates.get("doDate")
-
-            if pu_date and do_date:
-                resolved_gt_url = resolved_gt_url.format(
-                    puDateDay=pu_date.day,
-                    puDateMonth=pu_date.month,
-                    puDateYear=pu_date.year,
-                    doDateDay=do_date.day,
-                    doDateMonth=do_date.month,
-                    doDateYear=do_date.year,
-                )
 
         print_resolved_task(task_config, resolved_gt_url)
 
