@@ -51,9 +51,6 @@ class BookingUrlMatch(BaseMetric):
         self._matched_gt_url = ""
         self._match_details: dict = {}
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(gt_urls={self.gt_urls})"
-
     async def reset(self) -> None:
         self._found_match = False
         self._agent_url = ""
@@ -456,13 +453,12 @@ class BookingUrlMatch(BaseMetric):
 
         return filters
 
-
     def _compare_filters(self, agent_filters, gt_filters):
         mismatches = []
 
         for key, gt_values in gt_filters.items():
             if key == "price":
-             continue
+                continue
 
             if key not in agent_filters:
                 mismatches.append(f"Missing filter: {key}")
@@ -470,17 +466,10 @@ class BookingUrlMatch(BaseMetric):
 
             agent_values = agent_filters[key]
 
-            # Handle multi-value GT filters (dates, etc.)
-            if isinstance(gt_values, list):
-                if not any(v in gt_values for v in agent_values):
-                    mismatches.append(
-                        f"{key}: {agent_values} does not include any of {gt_values}"
-                    )
-            else:
-                if not gt_values.issubset(agent_values):
-                    mismatches.append(
-                        f"{key}: {agent_values} does not include {gt_values}"
-                    )
+            if not gt_values.issubset(agent_values):
+                mismatches.append(
+                    f"{key}: {agent_values} does not include {gt_values}"
+                )
 
         return (False, {"mismatches": mismatches}) if mismatches else (True, {})
 
@@ -571,12 +560,12 @@ def generate_task_config(
     eval_target = get_import_path(BookingUrlMatch)
     eval_config = {"_target_": eval_target, "gt_url": all_gt_urls}
 
-    resolved_placeholders: dict[str, list[str]] | None = None
+    # resolved_placeholders: dict[str, list[str]] | None = None
 
     return BaseTaskConfig(
         url=url,
         task=rendered_task,
         user_metadata=user_metadata,
         eval_config=eval_config,
-        resolved_placeholders=resolved_placeholders,
+        # resolved_placeholders=resolved_placeholders,
     )

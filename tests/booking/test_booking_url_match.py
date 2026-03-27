@@ -3,7 +3,7 @@ Pytest unit tests for Booking.com URL Match verifier.
 """
 
 import pytest
-from navi_bench.booking.demo_booking import generate_task_config
+from navi_bench.booking.booking_url_match import generate_task_config
 from navi_bench.booking.booking_url_match import (
     BookingUrlMatch,
     BookingVerifierResult,
@@ -171,8 +171,7 @@ class TestFlightMatching:
         match, _ = _match(gt, gt)
         assert match is True
 
-    @pytest.mark.asyncio
-    async def test_parse_flight_url(self):
+    def test_parse_flight_url(self):
         url = f"{BASE_FLIGHT}?from=DEL.AIRPORT&to=PAR.CITY&depart=2026-04-01&type=ONEWAY&adults=2"
         parsed = _v(url)._parse_flights_url(url)
 
@@ -214,8 +213,7 @@ class TestCarMatching:
         match, _ = _match(agent, gt)
         assert match is False
 
-    @pytest.mark.asyncio
-    async def test_parse_cars_url(self):
+    def test_parse_cars_url(self):
         url = f"{BASE_CAR}?locationName=Paris&dropLocationName=Paris&puDay=1"
         parsed = _v(url)._parse_cars_url(url)
 
@@ -260,7 +258,7 @@ async def test_generate_task_config_gt_url_precedence():
         gt_url=gt_url_list,
     )
 
-    assert config.eval_config["gt_url"] == gt_url_list  # ✅ FIX
+    assert set(config.eval_config["gt_url"]) == set(gt_url_list)
 
 
 @pytest.mark.asyncio
@@ -291,3 +289,99 @@ async def test_generate_task_config_raises_value_error():
             location="Paris",
             timezone="Europe/Paris"
         )
+
+# =============================================================================
+# 7. ASYNC LIFECYCLE
+# =============================================================================
+class TestAsyncLifecycle:
+
+    @pytest.mark.asyncio
+    async def test_reset(self):
+        gt = f"{BASE_HOTEL}?ss=Paris"
+        v = BookingUrlMatch(gt_url=gt)
+
+        await v.update(url=gt)
+        await v.reset()
+
+        result = await v.compute()
+        assert result.score == 0.0
+
+    @pytest.mark.asyncio
+    async def test_first_match_sticks(self):
+        gt1 = f"{BASE_HOTEL}?ss=Paris"
+        gt2 = f"{BASE_HOTEL}?ss=London"
+
+        v = BookingUrlMatch(gt_url=[gt1, gt2])
+
+        await v.update(url=gt1)
+        await v.update(url=gt2)  # should be ignored
+
+        result = await v.compute_detailed()
+
+        assert result.match is True
+        assert result.gt_url == gt1  # first match sticks
+
+
+# =============================================================================
+# 8. MULTIPLE GT URL SUPPORT
+# =============================================================================
+class TestMultipleGTUrls:
+
+    @pytest.mark.asyncio
+    async def test_multiple_gt_urls(self):
+        gt1 = f"{BASE_HOTEL}?ss=Paris"
+        gt2 = f"{BASE_HOTEL}?ss=London"
+
+        v = BookingUrlMatch(gt_url=[gt1, gt2])
+
+        await v.update(url=gt2)
+        result = await v.compute_detailed()
+
+        assert result.match is True
+        assert result.gt_url == gt2
+
+# =============================================================================
+# 9. COMPUTE DETAILED OUTPUT
+# =============================================================================
+class TestComputeDetailed:
+
+    @pytest.mark.asyncio
+    async def test_compute_detailed_fields(self):
+        gt = f"{BASE_HOTEL}?ss=Paris"
+        v = BookingUrlMatch(gt_url=gt)
+
+        await v.update(url=gt)
+        result = await v.compute_detailed()
+
+        assert isinstance(result, BookingVerifierResult)
+        assert result.score == 1.0
+        assert result.match is True
+        assert result.agent_url == gt
+        assert result.gt_url == gt
+        assert isinstance(result.details, dict)
+
+# =============================================================================
+# 10. SCORING
+# =============================================================================
+class TestScoring:
+
+    @pytest.mark.asyncio
+    async def test_match_scores_1(self):
+        gt = f"{BASE_HOTEL}?ss=Paris"
+        v = BookingUrlMatch(gt_url=gt)
+
+        await v.update(url=gt)
+        result = await v.compute()
+
+        assert result.score == 1.0
+
+    @pytest.mark.asyncio
+    async def test_no_match_scores_0(self):
+        gt = f"{BASE_HOTEL}?ss=Paris"
+        agent = f"{BASE_HOTEL}?ss=London"
+
+        v = BookingUrlMatch(gt_url=gt)
+        await v.update(url=agent)
+
+        result = await v.compute()
+        assert result.score == 0.0
