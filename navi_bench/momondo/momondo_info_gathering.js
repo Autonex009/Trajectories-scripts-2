@@ -2,6 +2,7 @@
     const results = [];
     const url = window.location.href;
 
+    // Helper: Safely extract text
     const getText = (el) => {
         if (!el) return null;
         let text = el.innerText || el.textContent || '';
@@ -35,89 +36,8 @@
     };
 
     const Scraper = {
-        urlMetadata: () => {
-            let meta = {};
-            if (url.includes('/flights/') || url.includes('/flight-search/')) {
-                const match = url.match(/\/(?:flights|flight-search)\/([A-Za-z]{3})-([A-Za-z]{3})\/(\d{4}-\d{2}-\d{2})/i);
-                if (match) meta = { origin: match[1], destination: match[2], departDate: match[3] };
-            } else if (url.includes('/cars/')) {
-                const match = url.match(/\/cars\/([^\/]+)\/([^\/]+)\/(\d{4}-\d{2}-\d{2})/i);
-                if (match) meta = { pickUpLocation: match[1], dropOffLocation: match[2], pickUpDate: match[3] };
-            } else if (url.includes('/hotels/')) {
-                const match = url.match(/\/hotels\/([^\/]+)\/(\d{4}-\d{2}-\d{2})\/(\d{4}-\d{2}-\d{2})/i);
-                if (match) meta = { city: match[1], checkIn: match[2], checkOut: match[3] };
-            }
-            return meta;
-        },
-
-        filters: () => {
-            const f = { filterAirlines: [], filterStops: [], filterMaxPrice: null };
-            if (!url.includes('/flights/') && !url.includes('/flight-search/')) return f; 
-            
-            try {
-                // Helper to extract active filters from a specific region
-                const getActiveFilters = (regionLabel) => {
-                    const labels = [];
-                    const region = document.querySelector(`div[role="region"][aria-label="${regionLabel}"]`);
-                    if (!region) return labels;
-
-                    // CRITICAL CHECK: Is this filter section actually active?
-                    // Momondo hides the "Reset" button when a filter is default/inactive.
-                    const resetBtn = region.querySelector('[class*="filters-reset"]');
-                    if (resetBtn && (resetBtn.className.includes('hidden') || resetBtn.getAttribute('aria-disabled') === 'true')) {
-                        return labels; // Filter is inactive, return empty array
-                    }
-
-                    // If active, gather the text of all checked boxes
-                    const checkboxes = region.querySelectorAll('input[type="checkbox"]:checked');
-                    checkboxes.forEach(cb => {
-                        let text = '';
-                        // Standard robust HTML routing: match input ID to label 'for' attribute
-                        if (cb.id) {
-                            const labelEl = document.querySelector(`label[for="${cb.id}"]`);
-                            if (labelEl) text = getText(labelEl);
-                        }
-                        // Fallback to nearest container
-                        if (!text) {
-                            const outer = cb.closest('[class*="checkbox-outer"]');
-                            if (outer) text = getText(outer);
-                        }
-                        if (text) labels.push(text.trim());
-                    });
-                    return labels;
-                };
-
-                f.filterAirlines = getActiveFilters("Airlines");
-                f.filterStops = getActiveFilters("Stops");
-
-                // Process Price Slider
-                const priceRegion = document.querySelector('div[role="region"][aria-label="Price"]');
-                if (priceRegion) {
-                    const resetBtn = priceRegion.querySelector('[class*="filters-reset"]');
-                    
-                    // Only scrape the max price if the user has actually moved the slider
-                    if (resetBtn && (!resetBtn.className.includes('hidden') && resetBtn.getAttribute('aria-disabled') !== 'true')) {
-                        const priceNode = priceRegion.querySelector('[role="slider"]');
-                        if (priceNode && priceNode.getAttribute('aria-valuenow')) {
-                            let val = parseFloat(priceNode.getAttribute('aria-valuenow'));
-                            let valueText = priceNode.getAttribute('aria-valuetext') || "";
-                            
-                            // Convert back to INR if it rendered in a foreign currency internally
-                            if (valueText.includes('$')) val *= 83.0;
-                            else if (valueText.includes('€')) val *= 90.0;
-                            else if (valueText.includes('£')) val *= 105.0;
-                            
-                            f.filterMaxPrice = val;
-                        }
-                    }
-                }
-            } catch(e) { console.error("Momondo Filter parse error", e); }
-            return f;
-        },
-
         flightListings: () => {
             const collected = [];
-            // Target the main container. Added fallback classes in case ARIA roles are stripped.
             const rows = document.querySelectorAll('div[role="group"][aria-label^="Result item"], .nrc6-wrapper');
 
             rows.forEach(row => {
@@ -127,11 +47,8 @@
 
                     const priceNode = row.querySelector('[class*="price-text"], [data-test-id="price"], .price');
                     const extractedPrice = Parsers.price(priceNode ? getText(priceNode) : rowText);
+                    if (!extractedPrice) return; 
 
-                    if (!extractedPrice) return; // Skip empty/invalid rows
-
-                    // 1. ROBUST TIME PARSING: Regex the raw text for HH:MM - HH:MM
-                    // This ignores HTML structure entirely and looks for the time signature.
                     let departTime = null;
                     let arrivalTime = null;
                     const timeMatch = rowText.match(/(\d{1,2}:\d{2})\s*[-–\u2013\u2014]\s*(\d{1,2}:\d{2})/);
@@ -140,29 +57,19 @@
                         arrivalTime = timeMatch[2];
                     }
 
-                    // 2. ROBUST AIRLINE PARSING: Fallback to Logo Alt Tags
                     const airlineNode = row.querySelector('[class*="operator-text"], .codeshares-airline-names, [class*="name-only-text"]');
                     let airlineText = airlineNode ? getText(airlineNode) : '';
-                    
                     if (!airlineText) {
-                        // If the text class is hidden/obfuscated, grab the airline name from the logo images!
                         const logos = row.querySelectorAll('img[alt]');
                         const alts = [];
                         logos.forEach(img => {
                             const alt = (img.getAttribute('alt') || '').trim();
-                            // Filter out generic image alts, keeping the airline names
-                            if (alt && alt.length > 2 && !alt.toLowerCase().includes("logo")) {
-                                alts.push(alt);
-                            }
+                            if (alt && alt.length > 2 && !alt.toLowerCase().includes("logo")) alts.push(alt);
                         });
-                        if (alts.length > 0) {
-                            airlineText = [...new Set(alts)].join(', '); // Remove duplicates (e.g. for round trips)
-                        }
+                        if (alts.length > 0) airlineText = [...new Set(alts)].join(', '); 
                     }
 
                     let extractedStops = Parsers.stops(rowText);
-
-                    // 3. Cabin Class Fallback
                     let cabinText = '';
                     const cabinNode = row.querySelector('[aria-label*="Cabin"], [class*="cabin"]');
                     if (cabinNode) cabinText = getText(cabinNode);
@@ -180,128 +87,296 @@
                         arrivalTime,
                         cabinClass: cabinText.toLowerCase()
                     });
-                    
-                } catch (e) {
-                    console.error("Error parsing row:", e);
-                }
+                } catch (e) { console.error("Error parsing flight row:", e); }
             });
 
-            // Deduplicate in case multiple selectors matched parent/child elements of the same result
             const unique = [];
             const seen = new Set();
             collected.forEach(item => {
                 const key = `${item.price}-${item.departTime}-${item.arrivalTime}-${item.airline}`;
-                if (!seen.has(key)) {
-                    seen.add(key);
-                    unique.push(item);
-                }
+                if (!seen.has(key)) { seen.add(key); unique.push(item); }
+            });
+            return unique;
+        },
+
+        hotelListings: () => {
+            const collected = [];
+            const rows = document.querySelectorAll('.S0Ps, .yuAt[role="group"][aria-label]');
+            const processedElements = new Set();
+
+            rows.forEach(row => {
+                const container = row.closest('.S0Ps') || row;
+                if (processedElements.has(container)) return;
+                processedElements.add(container);
+
+                try {
+                    let name = '';
+                    const nameEl = container.querySelector('.c9Hnq-big-name');
+                    if (nameEl) name = getText(nameEl);
+                    
+                    if (!name) {
+                        const groupEl = container.querySelector('[role="group"][aria-label]') || container;
+                        name = groupEl.getAttribute('aria-label');
+                    }
+                    
+                    if (!name || name.includes('Result item') || name === 'Search results') return;
+
+                    let extractedPrice = null;
+                    const priceNode = container.querySelector('[data-target="price"], .c1XBO');
+                    if (priceNode) {
+                        extractedPrice = Parsers.price(getText(priceNode));
+                    }
+                    if (!extractedPrice) return; 
+
+                    let score = null;
+                    const scoreNode = container.querySelector('.c9kNN');
+                    if (scoreNode) {
+                        const match = getText(scoreNode).match(/[\d.]+/);
+                        if (match) score = parseFloat(match[0]);
+                    }
+
+                    let stars = null;
+                    const starsNode = container.querySelector('.hEI8');
+                    if (starsNode) {
+                        const starMatch = getText(starsNode).match(/(\d+)/);
+                        if (starMatch) stars = parseInt(starMatch[1], 10);
+                    }
+                    if (!stars) {
+                        const starIcons = container.querySelectorAll('.O3Yc-star');
+                        if (starIcons && starIcons.length > 0) stars = starIcons.length;
+                    }
+
+                    let provider = 'Unknown';
+                    const providerImg = container.querySelector('.afsH-provider-logo, [class*="provider-logo"]');
+                    if (providerImg && providerImg.getAttribute('alt')) {
+                        provider = providerImg.getAttribute('alt').replace('.com', '').trim();
+                    }
+
+                    const freebies = [];
+                    const freebieNodes = container.querySelectorAll('.BNDX');
+                    freebieNodes.forEach(f => {
+                        const text = getText(f);
+                        if (text) freebies.push(text);
+                    });
+
+                    if (freebies.length === 0) {
+                        const rawText = getText(container);
+                        if (/free breakfast/i.test(rawText)) freebies.push('Free breakfast');
+                        if (/free cancellation/i.test(rawText)) freebies.push('Free cancellation');
+                    }
+
+                    collected.push({
+                        source: "dom_hotel_listing",
+                        title: name,
+                        price: extractedPrice,
+                        score: score,
+                        stars: stars,
+                        provider: provider,
+                        freebies: freebies
+                    });
+
+                } catch (e) { console.error("Error parsing hotel row:", e); }
             });
 
+            const unique = [];
+            const seen = new Set();
+            collected.forEach(item => {
+                const key = `${item.title}-${item.price}`;
+                if (!seen.has(key)) { seen.add(key); unique.push(item); }
+            });
             return unique;
         },
 
         carListings: () => {
             const collected = [];
-            // Target generalized car result blocks
-            const cards = document.querySelectorAll('[class*="car-result-item"], [data-resultid]');
+            // Target the main car result wrapper
+            const rows = document.querySelectorAll('.jo6g-car-result-item');
 
-            cards.forEach(card => {
+            rows.forEach(row => {
                 try {
-                    const titleNode = card.querySelector('.js-title, [class*="title"]');
-                    const categoryNode = card.querySelector('[class*="sub-title"]');
+                    // 1. Car Name and Category
+                    let title = 'Unknown Car';
+                    let category = '';
+                    const titleNode = row.querySelector('.js-title');
+                    if (titleNode) title = getText(titleNode);
                     
-                    const priceNode = card.querySelector('[class*="price-total"]');
-                    const extractedPrice = Parsers.price(getText(priceNode));
+                    const subTitleNode = row.querySelector('.MseY-sub-title');
+                    if (subTitleNode) {
+                        const rawCategory = getText(subTitleNode);
+                        category = rawCategory.replace(/or similar/i, '').trim();
+                        // Sometimes the category is just "View deal for more details", ignore it
+                        if (category.toLowerCase().includes('view deal')) category = '';
+                    }
 
-                    const providerNode = card.querySelector('[class*="provider-name"]');
-                    const agencyImg = card.querySelector('img[alt^="Car agency:"]');
-                    const agencyName = agencyImg ? agencyImg.getAttribute('alt').replace('Car agency:', '').trim() : '';
+                    // 2. Price
+                    let extractedPrice = null;
+                    const priceNode = row.querySelector('.c4nz8-price-total, [aria-label*="total"]');
+                    if (priceNode) {
+                        extractedPrice = Parsers.price(getText(priceNode));
+                    }
+                    if (!extractedPrice) return; // Skip if no valid price
 
-                    let passengers = null, bags = null, doors = null, transmission = null;
-                    const featureNodes = card.querySelectorAll('[role="listitem"]');
-                    
-                    featureNodes.forEach(f => {
-                        const aria = f.getAttribute('aria-label') || '';
-                        const text = getText(f);
-                        if (aria.includes('Passengers')) passengers = parseInt(text);
-                        if (aria.includes('Bags')) bags = parseInt(text);
-                        if (aria.includes('doors')) doors = parseInt(text);
-                        if (aria.includes('Transmission')) transmission = text;
+                    // 3. Booking Provider / Agency
+                    let provider = 'Unknown Provider';
+                    const providerNode = row.querySelector('.EuxN-provider-name');
+                    if (providerNode) {
+                        provider = getText(providerNode);
+                    } else {
+                        // Fallback to the provider image alt tag
+                        const providerImg = row.querySelector('.EuxN-provider-logo');
+                        if (providerImg && providerImg.getAttribute('alt')) {
+                            provider = providerImg.getAttribute('alt').replace('Provider:', '').trim();
+                        }
+                    }
+
+                    let agency = 'Unknown Agency';
+                    const agencyImg = row.querySelector('.mR2O-agency-logo');
+                    if (agencyImg && agencyImg.getAttribute('alt')) {
+                        agency = agencyImg.getAttribute('alt').replace('Car agency:', '').trim();
+                    }
+
+                    // 4. Passenger capacity (Find the list item that says "Passengers count")
+                    let passengers = null;
+                    const passNode = row.querySelector('[aria-label="Passengers count"]');
+                    if (passNode) {
+                        const passText = getText(passNode);
+                        if (passText) passengers = parseInt(passText, 10);
+                    }
+
+                    collected.push({
+                        source: "dom_car_listing",
+                        title: title,
+                        category: category.toLowerCase(),
+                        price: extractedPrice,
+                        provider: provider,
+                        agency: agency,
+                        passengers: passengers
                     });
 
-                    if (extractedPrice) {
-                        collected.push({
-                            source: "dom_car_listing",
-                            title: getText(titleNode),
-                            category: getText(categoryNode),
-                            price: extractedPrice,
-                            provider: getText(providerNode),
-                            agency: agencyName,
-                            passengers,
-                            bags,
-                            doors,
-                            transmission
-                        });
-                    }
-                } catch (e) { console.error('Car card parse error', e); }
+                } catch (e) {
+                    console.error("Error parsing car row:", e);
+                }
             });
-            return collected;
+
+            // Deduplicate based on Title, Provider, and Price
+            const unique = [];
+            const seen = new Set();
+            collected.forEach(item => {
+                const key = `${item.title}-${item.provider}-${item.price}`;
+                if (!seen.has(key)) { seen.add(key); unique.push(item); }
+            });
+            return unique;
         },
 
-        hotelListings: () => {
-            const collected = [];
-            const cards = document.querySelectorAll('[role="group"][data-resultid], .yuAt[role="group"]');
+        urlMetadata: () => {
+            let meta = {};
+            if (url.includes('/flights/') || url.includes('/flight-search/')) {
+                const match = url.match(/\/(?:flights|flight-search)\/([A-Za-z]{3})-([A-Za-z]{3})\/(\d{4}-\d{2}-\d{2})/i);
+                if (match) meta = { origin: match[1], destination: match[2], departDate: match[3] };
+            } else if (url.includes('/cars/') || url.includes('/car-search/')) {
+                const match = url.match(/\/(?:cars|car-search)\/([^\/]+)\/([^\/]+)\/(\d{4}-\d{2}-\d{2})/i);
+                if (match) meta = { pickUpLocation: match[1], dropOffLocation: match[2], pickUpDate: match[3] };
+            } else if (url.includes('/hotels/') || url.includes('/hotel-search/')) {
+                const match = url.match(/\/(?:hotels|hotel-search)\/([^\/]+)(?:\/(\d{4}-\d{2}-\d{2})\/(\d{4}-\d{2}-\d{2}))?/i);
+                if (match) meta = { city: match[1], checkIn: match[2] || null, checkOut: match[3] || null };
+            }
+            return meta;
+        },
 
-            cards.forEach(card => {
-                try {
-                    const nameNode = card.querySelector('[class*="big-name"]');
-                    const name = getText(nameNode);
-                    if (!name) return;
-
-                    const priceNode = card.querySelector('[data-target="price"], [class*="price"]');
-                    const extractedPrice = Parsers.price(getText(priceNode));
-
-                    const scoreNode = card.querySelector('[class*="rating"], [class*="score"]');
-                    const score = scoreNode && getText(scoreNode) !== "-" ? parseFloat(getText(scoreNode)) : null;
-
-                    const starNode = card.querySelector('[class*="stars"]');
-                    const starsText = getText(starNode);
-                    const starsMatch = starsText ? starsText.match(/(\d+)\s*stars?/i) : null;
-                    const stars = starsMatch ? parseInt(starsMatch[1]) : 0;
-
-                    const providerImg = card.querySelector('img[class*="provider-logo"]');
-                    const provider = providerImg ? providerImg.getAttribute('alt') : '';
-
-                    const freebies = [];
-                    const freebieNodes = card.querySelectorAll('[class*="freebies"], [class*="amenities"]');
-                    freebieNodes.forEach(n => {
-                        const txt = getText(n) || n.getAttribute('title');
-                        if (txt) {
-                            txt.split(',').forEach(f => {
-                                const clean = f.trim();
-                                if (clean && !freebies.includes(clean)) freebies.push(clean);
-                            });
+        filters: () => {
+            const f = { 
+                filterAirlines: [], 
+                filterStops: [], 
+                filterMaxPrice: null,
+                filterFreebies: [],
+                filterMinStars: null,
+                filterMinScore: null
+            };
+            
+            const isFlight = url.includes('/flights/') || url.includes('/flight-search/');
+            const isHotel = url.includes('/hotels/') || url.includes('/hotel-search/');
+            
+            if (!isFlight && !isHotel) return f; 
+            
+            try {
+                // 1. Shared Max Price Logic
+                const priceRegion = document.querySelector('div[role="region"][aria-label="Price"]');
+                if (priceRegion) {
+                    const resetBtn = priceRegion.querySelector('[class*="filters-reset"]');
+                    const isResetHidden = resetBtn && (resetBtn.className.includes('hidden') || resetBtn.getAttribute('aria-disabled') === 'true');
+                    
+                    if (isHotel || !isResetHidden) {
+                        const maxSlider = priceRegion.querySelector('[role="slider"][aria-label*="Max"], [role="slider"]:nth-child(2), [role="slider"]');
+                        if (maxSlider) {
+                            let valueText = maxSlider.getAttribute('aria-valuetext') || maxSlider.getAttribute('aria-valuenow');
+                            const val = Parsers.price(valueText);
+                            if (val) f.filterMaxPrice = val;
                         }
+                    }
+                }
+
+                // 2. Flight Specific Logic
+                if (isFlight) {
+                    const getActiveFlightFilters = (regionLabel) => {
+                        const labels = [];
+                        const region = document.querySelector(`div[role="region"][aria-label="${regionLabel}"]`);
+                        if (!region) return labels;
+
+                        const resetBtn = region.querySelector('[class*="filters-reset"]');
+                        if (resetBtn && (resetBtn.className.includes('hidden') || resetBtn.getAttribute('aria-disabled') === 'true')) {
+                            return labels; 
+                        }
+
+                        const checkboxes = region.querySelectorAll('input[type="checkbox"]:checked');
+                        checkboxes.forEach(cb => {
+                            let text = '';
+                            if (cb.id) {
+                                const labelEl = document.querySelector(`label[for="${cb.id}"]`);
+                                if (labelEl) text = getText(labelEl);
+                            }
+                            if (!text) {
+                                const outer = cb.closest('[class*="checkbox-outer"]');
+                                if (outer) text = getText(outer);
+                            }
+                            if (text) labels.push(text.trim());
+                        });
+                        return labels;
+                    };
+
+                    f.filterAirlines = getActiveFlightFilters("Airlines");
+                    f.filterStops = getActiveFlightFilters("Stops");
+                }
+
+                // 3. Hotel Specific Logic
+                if (isHotel) {
+                    const activeChips = document.querySelectorAll('div[role="checkbox"][aria-checked="true"].IAhs-chip');
+                    activeChips.forEach(chip => {
+                        const text = getText(chip);
+                        if (text) f.filterFreebies.push(text);
                     });
 
-                    const locNode = card.querySelector('[class*="location"], [class*="neighborhood"]');
-                    const location = getText(locNode);
-
-                    if (extractedPrice) {
-                        collected.push({
-                            source: "dom_hotel_listing",
-                            title: name,
-                            price: extractedPrice,
-                            score: score,
-                            stars: stars,
-                            provider: provider,
-                            freebies: freebies,
-                            location: location
-                        });
+                    const classRegion = document.querySelector('div[role="region"][aria-label="Hotel class"], #stars');
+                    if (classRegion) {
+                        const activeClass = classRegion.querySelector('.HNDy-active .HNDy-label');
+                        if (activeClass) {
+                            const text = getText(activeClass);
+                            const match = text.match(/(\d)/); 
+                            if (match) f.filterMinStars = parseInt(match[1], 10);
+                        }
                     }
-                } catch (e) { console.error('Hotel card parse error', e); }
-            });
-            return collected;
+
+                    const scoreRegion = document.querySelector('div[role="region"][aria-label="Review Score"], #extendedrating');
+                    if (scoreRegion) {
+                        const activeScore = scoreRegion.querySelector('.HNDy-active .HNDy-label');
+                        if (activeScore) {
+                            const text = getText(activeScore);
+                            const match = text.match(/(\d)/); 
+                            if (match && parseInt(match[1], 10) > 0) f.filterMinScore = parseFloat(match[1]);
+                        }
+                    }
+                }
+            } catch(e) { console.error("Momondo Filter parse error", e); }
+            return f;
         }
     };
 
@@ -312,10 +387,10 @@
         if (url.includes('/flights/') || url.includes('/flight-search/')) {
             pageType = 'flight_results';
             scraped.push(...Scraper.flightListings());
-        } else if (url.includes('/cars/')) {
+        } else if (url.includes('/cars/') || url.includes('/car-search/')) {
             pageType = 'car_results';
             scraped.push(...Scraper.carListings());
-        } else if (url.includes('/hotels/')) {
+        } else if (url.includes('/hotels/') || url.includes('/hotel-search/')) {
             pageType = 'hotel_results';
             scraped.push(...Scraper.hotelListings());
         }
