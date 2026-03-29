@@ -971,3 +971,92 @@ class TestGenerateTaskConfig:
             gt_url=["https://www.skyscanner.net/transport/flights/jfk/lax/260420/"],
         )
         assert "SkyscannerUrlMatch" in config.eval_config["_target_"]
+
+
+# =============================================================================
+# 14. ISO Date Format Tests (critical regex bug fix)
+# =============================================================================
+# Before the fix, parse_flight_url only matched 6-digit YYMMDD dates.
+# dates.py always produces YYYY-MM-DD, so origin/dest/dates were empty
+# and any flight URL would silently score 1.0 (false positive).
+
+
+class TestISODateFormat:
+    def test_iso_oneway_parses_origin_dest_date(self):
+        url = FLIGHTS_BASE + "/jfk/lax/2026-04-20/?adultsv2=1&cabinclass=economy&rtn=0"
+        r = parse_flight_url(url)
+        assert r["origin"] == "jfk"
+        assert r["destination"] == "lax"
+        assert r["depart_date"] == "2026-04-20"
+        assert r["return_date"] == ""
+
+    def test_iso_roundtrip_parses_both_dates(self):
+        url = FLIGHTS_BASE + "/jfk/lax/2026-04-20/2026-04-25/?adultsv2=1&rtn=1"
+        r = parse_flight_url(url)
+        assert r["depart_date"] == "2026-04-20"
+        assert r["return_date"] == "2026-04-25"
+
+    def test_iso_exact_match_passes(self):
+        url = FLIGHTS_BASE + "/jfk/lax/2026-04-20/?adultsv2=1&cabinclass=economy&rtn=0"
+        match, details = _match(url, url)
+        assert match is True, "Expected match: " + str(details.get("mismatches"))
+
+    def test_iso_origin_mismatch_detected(self):
+        # Before fix: regex failed -> origin empty -> mismatch skipped -> false positive
+        gt = FLIGHTS_BASE + "/jfk/lax/2026-04-20/?rtn=0"
+        agent = FLIGHTS_BASE + "/syd/mel/2026-04-20/?rtn=0"
+        match, details = _match(agent, gt)
+        assert match is False
+        assert any("rigin" in m for m in details["mismatches"])
+
+    def test_iso_and_yymmdd_no_cross_match(self):
+        # YYMMDD GT vs ISO agent: different string literals
+        gt = FLIGHTS_BASE + "/jfk/lax/260420/?rtn=0"
+        agent = FLIGHTS_BASE + "/jfk/lax/2026-04-20/?rtn=0"
+        match, _ = _match(agent, gt)
+        assert match is False
+
+
+# =============================================================================
+# 15. Hotel Children Encoding Tests (children=N&children_ages=X,Y)
+# =============================================================================
+# Bug fixed: parse_hotel_url previously did not parse children/children_ages.
+# _match_hotel_urls previously did not check them — false positives for all
+# hotel-children tasks (8 tasks in the benchmark).
+
+
+class TestHotelChildrenEncoding:
+    def test_hotel_parses_children_count_and_ages(self):
+        url = HOTELS_BASE + "?entity_id=27544008&checkin=2026-04-20&checkout=2026-04-25&adults=2&children=2&children_ages=6,9&rooms=1"
+        r = parse_hotel_url(url)
+        assert r["children"] == "2"
+        assert sorted(r["children_ages"]) == ["6", "9"]
+
+    def test_hotel_parses_3_children_ages(self):
+        url = HOTELS_BASE + "?entity_id=27544008&adults=2&children=3&children_ages=5,8,11"
+        r = parse_hotel_url(url)
+        assert r["children"] == "3"
+        assert sorted(r["children_ages"]) == ["11", "5", "8"]
+
+    def test_hotel_children_match_passes(self):
+        url = HOTELS_BASE + "?entity_id=27544008&checkin=2026-04-20&checkout=2026-04-25&adults=2&children=2&children_ages=6,9&rooms=1"
+        v = SkyscannerUrlMatch(gt_url=url)
+        match, details = v._urls_match(url, url)
+        assert match is True, str(details)
+
+    def test_hotel_children_ages_mismatch_detected(self):
+        # Before fix: children_ages not checked -> would return True (false positive)
+        gt = HOTELS_BASE + "?entity_id=27544008&checkin=2026-04-20&checkout=2026-04-25&adults=2&children=2&children_ages=6,9&rooms=1"
+        agent = HOTELS_BASE + "?entity_id=27544008&checkin=2026-04-20&checkout=2026-04-25&adults=2&rooms=1"
+        v = SkyscannerUrlMatch(gt_url=gt)
+        match, details = v._urls_match(agent, gt)
+        assert match is False
+        assert any("children_ages" in m for m in details["mismatches"])
+
+    def test_hotel_children_age_order_independent(self):
+        # Ages 5,8,11 vs 11,5,8 should still match (sorted comparison)
+        gt = HOTELS_BASE + "?entity_id=27544008&adults=2&children=3&children_ages=5,8,11"
+        agent = HOTELS_BASE + "?entity_id=27544008&adults=2&children=3&children_ages=11,5,8"
+        v = SkyscannerUrlMatch(gt_url=gt)
+        match, details = v._urls_match(agent, gt)
+        assert match is True, str(details)

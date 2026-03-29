@@ -4,7 +4,7 @@ This module provides functionality to verify AI agent navigation on Skyscanner
 by comparing the agent's final URL against expected ground truth URLs.
 
 The verifier handles all Skyscanner URL variations including:
-- Flight search paths: /transport/flights/{origin}/{dest}/{YYMMDD}[/{YYMMDD}]
+- Flight search paths: /transport/flights/{origin}/{dest}/{YYYY-MM-DD}[/{YYYY-MM-DD}] (ISO) or YYMMDD (legacy)
 - Hotel search params: entity_id, checkin, checkout, adults, rooms, sort
 - Car hire paths: /carhire/results/{pickup}/{dropoff}/{datetimeISO}/{datetimeISO}[/{age}]
 - Flight query params: rtn, adultsv2, childrenv2, cabinclass, stops, airlines, alliances
@@ -12,7 +12,7 @@ The verifier handles all Skyscanner URL variations including:
 - Filter order independence, case-insensitive comparison
 
 Browser-Verified Patterns (Mar 2026 on skyscanner.net):
-  Flight path: /transport/flights/jfk/lax/260420/260425/
+  Flight path: /transport/flights/jfk/lax/2026-04-20/2026-04-25/ (ISO, produced by dates.py)
   Flight params: adultsv2=2, cabinclass=business, rtn=1
   Stops: stops=!oneStop,!twoPlusStops (exclusion-prefix format)
   Alliances: alliances=Star Alliance (with space, URL-encoded %20)
@@ -255,8 +255,11 @@ def parse_flight_url(url: str) -> dict[str, Any]:
     }
 
     # Extract path segments: /transport/flights/JFK/LAX/260420[/260425]
+    # Accept both YYMMDD (e.g. 260420) and YYYY-MM-DD ISO (e.g. 2026-04-20).
+    # dates.py always produces YYYY-MM-DD, so the ISO branch is the primary path.
+    _DATE_PAT = r"(\d{4}-\d{2}-\d{2}|\d{6})"
     flight_match = re.search(
-        r"/transport/flights/([a-zA-Z]{2,5})/([a-zA-Z]{2,5})/(\d{6})(?:/(\d{6}))?",
+        rf"/transport/flights/([a-zA-Z]{{2,5}})/([a-zA-Z]{{2,5}})/{_DATE_PAT}(?:/{_DATE_PAT})?",
         path,
         re.IGNORECASE,
     )
@@ -288,7 +291,7 @@ def parse_flight_url(url: str) -> dict[str, Any]:
     if airlines_raw:
         result["airlines"] = _normalize_airlines(airlines_raw)
 
-    # Alliances (UpperCamelCase)
+    # Alliances (may have spaces — e.g. "Star Alliance"; normalized to lowercase)
     alliances_raw = _get_param(query, "alliances")
     if alliances_raw:
         result["alliances"] = _normalize_alliances(alliances_raw)
@@ -306,13 +309,21 @@ def parse_hotel_url(url: str) -> dict[str, Any]:
 
     Hotel URL anatomy:
       /hotels/search?entity_id=27544008&checkin=2026-04-20&checkout=2026-04-25
-        &adults=2&rooms=1&sort=price
+        &adults=2&rooms=1&children=2&children_ages=6,9&sort=price
+
+    Hotel children encoding (browser-verified, differs from flight encoding):
+      - Flight: childrenv2=5|8 (pipe-separated ages, no count)
+      - Hotel:  children=2&children_ages=6,9 (count + comma-separated ages separately)
 
     Returns dict with keys:
-      entity_id, checkin, checkout, adults, rooms, sort
+      entity_id, checkin, checkout, adults, rooms, children, children_ages, sort
     """
     parsed = urlparse(url.strip())
     query = parse_qs(parsed.query, keep_blank_values=True)
+
+    # Hotel children_ages are comma-separated; normalize to sorted list for comparison
+    children_ages_raw = _get_param(query, "children_ages")
+    children_ages = sorted([a.strip() for a in children_ages_raw.split(",") if a.strip()])
 
     return {
         "entity_id": _get_param(query, "entity_id"),
@@ -320,6 +331,8 @@ def parse_hotel_url(url: str) -> dict[str, Any]:
         "checkout": _get_param(query, "checkout"),
         "adults": _get_param(query, "adults"),
         "rooms": _get_param(query, "rooms"),
+        "children": _get_param(query, "children"),
+        "children_ages": children_ages,
         "sort": _get_param(query, "sort").lower(),
     }
 
@@ -403,8 +416,8 @@ class SkyscannerUrlMatch(BaseMetric):
     """Comprehensive Skyscanner URL verifier for flights, hotels, and car hire.
 
     Browser-Verified (Mar 2026 on skyscanner.net):
-    - Flight path: /transport/flights/{origin}/{dest}/{YYMMDD}[/{YYMMDD}]
-    - Flight params: adultsv2, childrenv2, cabinclass, rtn, stops, airlines, alliances
+    - Flight path: /transport/flights/{origin}/{dest}/{YYYY-MM-DD}[/{YYYY-MM-DD}] (ISO primary)
+    - Flight params: adultsv2, childrenv2 (pipe-sep), cabinclass, rtn, stops, airlines, alliances
     - Hotel params: entity_id, checkin, checkout, adults, rooms, sort
     - Car hire path: /carhire/results/{numeric_id}/{numeric_id}/{datetimeISO}/{datetimeISO}/{age}
     - Car hire locations use INTERNAL NUMERIC IDs (95565085), not IATA codes
@@ -776,7 +789,28 @@ class SkyscannerUrlMatch(BaseMetric):
                 )
                 return False, details
 
-        # 6. Sort
+        # 6. Children count
+        if gt["children"]:
+            if agent["children"] and agent["children"] != gt["children"]:
+                details["mismatches"].append(
+                    f"children count: '{agent['children']}' vs '{gt['children']}'"
+                )
+                return False, details
+
+        # 7. Children ages (order-independent, comma-separated in hotel URLs)
+        if gt["children_ages"]:
+            if not agent["children_ages"]:
+                details["mismatches"].append(
+                    f"children_ages missing (expected {gt['children_ages']})"
+                )
+                return False, details
+            if sorted(agent["children_ages"]) != sorted(gt["children_ages"]):
+                details["mismatches"].append(
+                    f"children_ages: {agent['children_ages']} vs {gt['children_ages']}"
+                )
+                return False, details
+
+        # 8. Sort
         if gt["sort"]:
             if not agent["sort"]:
                 details["mismatches"].append(
