@@ -348,7 +348,6 @@ def generate_task_config_deterministic(
     location: str,
     timezone: str,
     timestamp: int | None = None,
-    # UPDATED: Default to Momondo India to align with the INR currency used in the prompt examples
     url: str = "https://www.momondo.in/", 
     values: dict[str, str] | None = None,
 ) -> BaseTaskConfig:
