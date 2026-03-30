@@ -12,7 +12,7 @@ The verifier handles all Skyscanner URL variations including:
 - Filter order independence, case-insensitive comparison
 
 Browser-Verified Patterns (Mar 2026 on skyscanner.net):
-  Flight path: /transport/flights/jfk/lax/2026-04-20/2026-04-25/ (ISO, produced by dates.py)
+  Flight path: /transport/flights/jfk/lax/260425/ (YYMMDD — ISO format causes 404!)
   Flight params: adultsv2=2, cabinclass=business, rtn=1
   Stops: stops=!oneStop,!twoPlusStops (exclusion-prefix format)
   Alliances: alliances=Star Alliance (with space, URL-encoded %20)
@@ -945,13 +945,27 @@ def generate_task_config(
     rendered_task = render_task_statement(task, resolved_placeholders)
 
     # Substitute resolved dates into gt_url strings
+    # IMPORTANT: Skyscanner flight paths require YYMMDD (e.g. 260425), NOT ISO (2026-04-25).
+    # dates.py always produces ISO, so we convert any ISO date in a flight path to YYMMDD.
+    _ISO_IN_FLIGHT_PATH = re.compile(
+        r"(/transport/flights/[a-zA-Z]{2,5}/[a-zA-Z]{2,5}/)"  # match up to the date
+        r"(\d{4})-(\d{2})-(\d{2})"                             # ISO date group 2,3,4
+    )
+
     rendered_gt_urls: list[str] = []
     for u in gt_url:
         rendered_u = u
         for placeholder_key, (_, dates) in resolved_placeholders.items():
             template = "{" + placeholder_key + "}"
             if template in rendered_u and dates:
-                rendered_u = rendered_u.replace(template, dates[0])
+                iso_date = dates[0]          # e.g. "2026-04-25"
+                rendered_u = rendered_u.replace(template, iso_date)
+        # Convert any ISO dates remaining in flight URL paths to YYMMDD
+        # This handles {departDateISO} / {returnDateISO} placeholders in flight paths.
+        if "/transport/flights/" in rendered_u:
+            def _to_yymmdd(m: re.Match) -> str:  # type: ignore[type-arg]
+                return m.group(1) + m.group(2)[2:] + m.group(3) + m.group(4)
+            rendered_u = _ISO_IN_FLIGHT_PATH.sub(_to_yymmdd, rendered_u)
         rendered_gt_urls.append(rendered_u)
 
     eval_target = get_import_path(SkyscannerUrlMatch)
