@@ -248,7 +248,6 @@ class MomondoInfoGathering(BaseMetric):
 
     @classmethod
     def _check_multi_candidate_query(cls, query: MultiCandidateQuery, info: InfoDict) -> bool:
-        # All of your highly-tuned evaluation logic from Kayak stays exactly the same!
         
         if q_origins := query.get("origins"):
             info_origin = (info.get("origin") or "").lower()
@@ -331,6 +330,21 @@ class MomondoInfoGathering(BaseMetric):
         if "min_passengers" in query and query["min_passengers"] is not None:
             passengers = info.get("passengers")
             if passengers is None or passengers < query["min_passengers"]: return False
+            
+        # BUG FIX: Ensure car types are actually evaluated against the DOM data
+        if q_car_types := query.get("car_types"):
+            info_title = (info.get("title") or "").lower()
+            info_category = (info.get("category") or "").lower()
+            
+            type_matched = False
+            for car_type in q_car_types:
+                ct_lower = car_type.lower()
+                if ct_lower in info_title or ct_lower in info_category:
+                    type_matched = True
+                    break
+            
+            if not type_matched:
+                return False
         
         if q_check_in := query.get("check_in_dates"):
             if info.get("checkIn") not in q_check_in: return False
