@@ -98,21 +98,24 @@
         },
 
         /**
-         * Parse time from text (HH:MM format).
+         * Parse time from text. Handles 12-hour AM/PM and 24-hour formats.
+         * IMPORTANT: 12-hour AM/PM must be checked FIRST — the bare HH:MM regex
+         * would otherwise match "2:30" inside "2:30 PM" and return "02:30"
+         * instead of the correct "14:30".
          */
         time: (text) => {
             if (!text) return null;
-            // 24-hour format: 14:30
-            let match = text.match(/(\d{1,2}):(\d{2})/);
-            if (match) return `${match[1].padStart(2, '0')}:${match[2]}`;
-            // 12-hour format: 2:30 PM
-            match = text.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+            // Check 12-hour AM/PM first (e.g. "2:30 PM" → "14:30")
+            let match = text.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
             if (match) {
                 let h = parseInt(match[1]);
                 if (match[3].toUpperCase() === 'PM' && h < 12) h += 12;
                 if (match[3].toUpperCase() === 'AM' && h === 12) h = 0;
                 return `${String(h).padStart(2, '0')}:${match[2]}`;
             }
+            // Fallback: 24-hour format (e.g. "14:30" → "14:30")
+            match = text.match(/(\d{1,2}):(\d{2})/);
+            if (match) return `${match[1].padStart(2, '0')}:${match[2]}`;
             return null;
         },
 
