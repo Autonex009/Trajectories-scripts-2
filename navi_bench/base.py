@@ -11,7 +11,6 @@ from datasets import Features, Value
 from loguru import logger
 from pydantic import BaseModel, Field
 
-
 T = TypeVar("T")
 
 
@@ -233,12 +232,13 @@ class DatasetItem(BaseModel):
     # task metadata fields
     env: str = Field(description="Environment: real | sim", pattern=r"^real|sim$")
     domain: str = Field(description="Website domain: e.g., expedia, google_flights")
-    l1_category: str = Field(
+    l1_category: str | None = Field(
         description=(
             "Task first-level category / sector: realestate | food | e_commerce | social | travel. "
             "Use underscore instead of hyphen."
         ),
         pattern=r"^realestate|food|e_commerce|social|travel$",
+        default=None,
     )
     l2_category: str | None = Field(
         description=(
