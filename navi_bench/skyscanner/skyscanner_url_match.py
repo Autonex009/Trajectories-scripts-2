@@ -53,7 +53,10 @@ class InputDict(TypedDict, total=False):
 
 class FinalResult(BaseModel):
     score: float
-
+    n_queries: int | None = None
+    n_covered: int | None = None
+    queries: list | None = None
+    is_query_covered: list | None = None
 
 class SkyscannerVerifierResult(BaseModel):
     """Detailed verification result for Skyscanner URL matching."""
@@ -1131,9 +1134,9 @@ class SkyscannerInfoGathering(BaseMetric):
             if ptype == "flights":
                 key = f"flight-{info.get('airline')}-{info.get('departTime')}-{info.get('price')}"
             elif ptype in ["hotel_results", "hotels"]:
-                key = f"hotel-{info.get('title')}-{info.get('price')}"
+                key = f"hotel-{info.get('name')}-{info.get('price')}"
             elif ptype in ["carhire_results", "carhire"]:
-                key = f"car-{info.get('title')}-{info.get('supplier')}-{info.get('price')}"
+                key = f"car-{info.get('name')}-{info.get('supplier')}-{info.get('price')}"
             else:
                 key = str(info)
                 
@@ -1265,10 +1268,11 @@ class SkyscannerInfoGathering(BaseMetric):
                 return False
 
         if q_cabin_classes := query.get("cabin_classes"):
-            # The URL parsing part of skyscanner_url_match.js handles cabinclass
+            # The URL parsing part of skyscanner_url_match.js
             q_cabin_map = {"economy": ["economy", "econ"], "business": ["business", "biz"], "first": ["first"]}
             card_info = (info.get("cabinClass") or info.get("cabinclass") or "").lower()
-            if not any(c.lower() in card_info for c in q_cabin_classes):
+            allowed_terms = [t for cls in q_cabin_classes for t in q_cabin_map.get(cls, [cls])]
+            if not any(term in card_info for term in allowed_terms):
                 return False
 
         if query.get("require_direct") is True:
@@ -1289,7 +1293,7 @@ class SkyscannerInfoGathering(BaseMetric):
             if info.get("stars", 0) < query["min_stars"]: return False
             
         if "min_score" in query and query["min_score"] is not None:
-            score = info.get("score")
+            score = info.get("reviewScore")
             if score is None or score < query["min_score"]: return False
             
         # === Cars ===
