@@ -25,8 +25,14 @@ Author: NaviBench Team
 
 import asyncio
 import sys
+import os
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+
+# Dynamically add the project root to sys.path so the module can be run from any directory
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 from playwright.async_api import async_playwright
 from loguru import logger
@@ -110,7 +116,7 @@ def build_scenarios() -> list[DemoScenario]:
                 f"departing on {_d(7)}. 1 adult."
             ),
             gt_url=(
-                f"https://www.skyscanner.net/transport/flights/jfk/lax/{_d(7)}"
+                f"https://www.skyscanner.net/transport/flights/jfk/lax/{_yymmdd(7)}"
                 "/?adultsv2=1&cabinclass=economy&rtn=0"
             ),
             tags=["easy", "economy"],
@@ -127,7 +133,7 @@ def build_scenarios() -> list[DemoScenario]:
                 f"to Paris Charles de Gaulle (CDG). Depart {_d(10)}, return {_d(13)}. 2 adults."
             ),
             gt_url=(
-                f"https://www.skyscanner.net/transport/flights/lhr/cdg/{_d(10)}/{_d(13)}"
+                f"https://www.skyscanner.net/transport/flights/lhr/cdg/{_yymmdd(10)}/{_yymmdd(13)}"
                 "/?adultsv2=2&cabinclass=business&rtn=1"
             ),
             tags=["medium", "business", "roundtrip"],
@@ -145,7 +151,7 @@ def build_scenarios() -> list[DemoScenario]:
                 f"on {_d(5)}. 1 adult. Filter to non-stop flights only."
             ),
             gt_url=(
-                f"https://www.skyscanner.net/transport/flights/jfk/lax/{_d(5)}"
+                f"https://www.skyscanner.net/transport/flights/jfk/lax/{_yymmdd(5)}"
                 "/?adultsv2=1&cabinclass=economy&rtn=0&stops=!oneStop,!twoPlusStops"
             ),
             tags=["medium", "stops-filter"],
@@ -163,7 +169,7 @@ def build_scenarios() -> list[DemoScenario]:
                 f"on {_d(20)} for 2 adults and 2 children aged 5 and 8."
             ),
             gt_url=(
-                f"https://www.skyscanner.net/transport/flights/lax/cdg/{_d(20)}"
+                f"https://www.skyscanner.net/transport/flights/lax/cdg/{_yymmdd(20)}"
                 "/?adultsv2=2&childrenv2=5|8&cabinclass=economy&rtn=0"
             ),
             tags=["hard", "family", "children"],
@@ -181,7 +187,7 @@ def build_scenarios() -> list[DemoScenario]:
                 f"on {_d(20)} for 1 adult. Filter results to Star Alliance airlines only."
             ),
             gt_url=(
-                f"https://www.skyscanner.net/transport/flights/fra/jfk/{_d(20)}"
+                f"https://www.skyscanner.net/transport/flights/fra/jfk/{_yymmdd(20)}"
                 "/?adultsv2=1&cabinclass=economy&rtn=0&alliances=Star%20Alliance"
             ),
             tags=["hard", "alliance"],
@@ -200,7 +206,7 @@ def build_scenarios() -> list[DemoScenario]:
                 f"Filter to Oneworld alliance and non-stop flights only."
             ),
             gt_url=(
-                f"https://www.skyscanner.net/transport/flights/jfk/lhr/{_d(12)}/{_d(17)}"
+                f"https://www.skyscanner.net/transport/flights/jfk/lhr/{_yymmdd(12)}/{_yymmdd(17)}"
                 "/?adultsv2=2&childrenv2=12&cabinclass=first&rtn=1"
                 "&stops=!oneStop,!twoPlusStops&alliances=Oneworld"
             ),
@@ -584,12 +590,14 @@ async def run_scenario(scenario: DemoScenario) -> dict:
         best_details: dict = {}
         for u in visited_urls:
             try:
-                result = await verifier.compute(inputs=[{"url": u}])
+                await verifier.reset()
+                await verifier.update(url=u, page=page)
+                result = await verifier.compute()
                 if result.score > best_score:
                     best_score = result.score
                     best_details = verifier._match_details
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Error evaluating URL {u}: {e}")
 
     reporter.print_result(best_score, final_url, scenario.gt_url, best_details)
 
