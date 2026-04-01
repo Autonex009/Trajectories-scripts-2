@@ -33,6 +33,7 @@ from loguru import logger
 
 from navi_bench.skyscanner.skyscanner_url_match import (
     SkyscannerUrlMatch,
+    SkyscannerInfoGathering,
     generate_task_config,
 )
 
@@ -86,7 +87,8 @@ class DemoScenario:
     category: str          # flights | hotels | carhire
     description: str
     task_prompt: str
-    gt_url: str            # ground truth URL (may contain formatted dates)
+    gt_url: str = ""       # ground truth URL (may contain formatted dates)
+    queries: list = None   # for info gathering scenarios
     start_url: str = "https://www.skyscanner.net/"
     tags: list = field(default_factory=list)
     hint: str = ""
@@ -400,6 +402,21 @@ def build_scenarios() -> list[DemoScenario]:
             tags=["hard"],
             hint="JFK ID=95565058. Time must be 23:30 exactly (not rounded to 00:00 or 09:00).",
         ),
+
+        # C6 -- Info Gathering Dom Extraction
+        DemoScenario(
+            task_id="skyscanner/demo/info/carhire",
+            name="[INFO GATHERING] Find SUV in Miami under ₹25k",
+            category="carhire",
+            description="Agent must find an SUV listing in Miami directly on screen",
+            task_prompt=(
+                f"Search for a car hire picking up at MIA on {_d(10)}. Find an SUV under ₹25,000. Extract provider and price."
+            ),
+            gt_url="",
+            queries=[[{"car_types": ["SUV"], "max_price": 25000.0, "pickup_dates": [_d(10)]}]],
+            tags=["info_gathering"],
+            hint="Navigate to Miami car hire, select SUV, verify price on screen then press ENTER.",
+        ),
     ]
 
     return flights + hotels + carhire
@@ -531,7 +548,13 @@ async def run_scenario(scenario: DemoScenario) -> dict:
         mgr = BrowserManager()
         browser, context, page = await mgr.launch(p)
 
-        # Track every navigation
+        if scenario.queries is not None:
+            # Mount Info Gathering DOM listeners instantly
+            verifier = SkyscannerInfoGathering(queries=scenario.queries)
+            verifier.attach_to_context(context)
+        else:
+            verifier = SkyscannerUrlMatch(gt_url=scenario.gt_url)
+            await verifier.reset()
         def on_navigate(frame):
             if frame == page.main_frame:
                 u = page.url
@@ -552,21 +575,21 @@ async def run_scenario(scenario: DemoScenario) -> dict:
 
         await mgr.close()
 
-    # Verify with SkyscannerUrlMatch
-    verifier = SkyscannerUrlMatch(gt_url=scenario.gt_url)
-    await verifier.reset()
-
-    # Feed all visited URLs; verifier takes best match
-    best_score = 0.0
-    best_details: dict = {}
-    for u in visited_urls:
-        try:
-            result = await verifier.compute(inputs=[{"url": u}])
-            if result.score > best_score:
-                best_score = result.score
-                best_details = verifier._match_details
-        except Exception:
-            pass
+    if scenario.queries is not None:
+        result = await verifier.compute()
+        best_score = result.score
+        best_details = {"queries": scenario.queries, "is_query_covered": result.is_query_covered}
+    else:
+        best_score = 0.0
+        best_details: dict = {}
+        for u in visited_urls:
+            try:
+                result = await verifier.compute(inputs=[{"url": u}])
+                if result.score > best_score:
+                    best_score = result.score
+                    best_details = verifier._match_details
+            except Exception:
+                pass
 
     reporter.print_result(best_score, final_url, scenario.gt_url, best_details)
 
