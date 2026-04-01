@@ -1,4 +1,5 @@
-"""Recreation.gov URL match verifier for filtered search navigation."""
+"""Recreation.gov URL match verifier for filtered search navigation.
+"""
 
 from datetime import datetime
 from typing import TypedDict
