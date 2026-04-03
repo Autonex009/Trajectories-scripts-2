@@ -313,7 +313,10 @@ class MomondoInfoGathering(BaseMetric):
             if not any(c.lower() in info_city for c in q_cities): return False
             
         if "min_stars" in query and query["min_stars"] is not None:
-            if info.get("stars", 0) < query["min_stars"]: return False
+            stars = info.get("stars")
+            # If stars is None or less than required, it fails the query
+            if stars is None or stars < query["min_stars"]: 
+                return False
             
         if "min_score" in query and query["min_score"] is not None:
             score = info.get("score")
@@ -330,6 +333,7 @@ class MomondoInfoGathering(BaseMetric):
         if "min_passengers" in query and query["min_passengers"] is not None:
             passengers = info.get("passengers")
             if passengers is None or passengers < query["min_passengers"]: return False
+            
             
         # BUG FIX: Ensure car types are actually evaluated against the DOM data
         if q_car_types := query.get("car_types"):
