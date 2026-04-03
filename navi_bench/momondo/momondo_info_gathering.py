@@ -257,24 +257,8 @@ class MomondoInfoGathering(BaseMetric):
             info_dest = (info.get("destination") or "").lower()
             if not any(d.lower() == info_dest for d in q_destinations): return False
 
-        # Flight Date Check
-        if q_depart_dates := query.get("depart_dates"):
-            info_val = info.get("departDate")
-            # Only fail if the info HAS a departDate and it doesn't match
-            if info_val and info_val not in q_depart_dates: 
-                return False
-
-        # Hotel Date Check
-        if q_check_in := query.get("check_in_dates"):
-            info_val = info.get("checkIn")
-            if info_val and info_val not in q_check_in: 
-                return False
-
-        # Car Date Check
-        if q_pickup_dates := query.get("pickup_dates"):
-            info_val = info.get("pickUpDate")
-            if info_val and info_val not in q_pickup_dates: 
-                return False
+        # if q_depart_dates := query.get("depart_dates"):
+        #     if info.get("departDate") not in q_depart_dates: return False
 
         if q_airlines := query.get("airlines"):
             ticket_airline = (info.get("airline") or "").lower()
@@ -365,6 +349,31 @@ class MomondoInfoGathering(BaseMetric):
             
             if not type_matched:
                 return False
+        
+        # if q_check_in := query.get("check_in_dates"):
+        #     if info.get("checkIn") not in q_check_in: return False
+            
+        # if q_pickup_dates := query.get("pickup_dates"):
+        #     if info.get("pickUpDate") not in q_pickup_dates: return False
+        
+        # Flight Date Check
+        if q_depart_dates := query.get("depart_dates"):
+            info_val = info.get("departDate")
+            # Only fail if the info HAS a departDate and it doesn't match
+            if info_val and info_val not in q_depart_dates: 
+                return False
+
+        # Hotel Date Check
+        if q_check_in := query.get("check_in_dates"):
+            info_val = info.get("checkIn")
+            if info_val and info_val not in q_check_in: 
+                return False
+
+        # Car Date Check
+        if q_pickup_dates := query.get("pickup_dates"):
+            info_val = info.get("pickUpDate")
+            if info_val and info_val not in q_pickup_dates: 
+                return False
 
         return True
 
@@ -392,9 +401,10 @@ def generate_task_config_deterministic(
             if resolved_iso_dates:
                 for alternative_conditions in queries:
                     for query in alternative_conditions:
-                        # Only inject the date into fields that are relevant to the query type
-                        # We detect type by looking for domain-specific keys already in the query
-                        
+                        query["depart_dates"] = resolved_iso_dates
+                        query["check_in_dates"] = resolved_iso_dates
+                        query["pickup_dates"] = resolved_iso_dates
+
                         if "origins" in query or "destinations" in query:
                             query["depart_dates"] = resolved_iso_dates
                             
