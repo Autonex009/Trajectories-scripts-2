@@ -335,19 +335,22 @@ They do **not** affect search semantics and are excluded from comparison.
 
 ### Benchmark Dataset
 
-**50 tasks** in `expedia_benchmark_tasks.csv`:
+**70 tasks** in `expedia_benchmark_tasks.csv` — **all hard difficulty**:
 
-| Category | Count | Difficulty |
+| Category | Count | Scenarios |
 | :--- | :---: | :--- |
-| One-way Economy Flights | 5 | Easy |
-| Round-trip Economy Flights | 5 | Easy |
-| Cabin Class Variants | 5 | Medium |
-| Family Flights (children) | 9 | Medium–Hard |
-| Basic Hotel Searches | 5 | Easy |
-| Hotel Sort Variants | 5 | Medium |
-| Hotel with Children | 4 | Medium–Hard |
-| Multi-Room Hotels | 4 | Hard |
-| Complex Hotel Searches | 8 | Hard |
+| Business RT Family Flights | 5 | 2–3 adults + children, multiple cabin classes |
+| First Class Luxury Flights | 5 | 4 adults + teen, ultra-long-haul routes |
+| Premium Economy One-Way | 5 | Children ages, international routes |
+| Creative Economy Roundtrips | 7 | Groups of 2–6 adults, nonstop preference |
+| Business One-Way Complex | 6 | Solo to 4-person corporate, children |
+| Family Roundtrip Specials | 6 | Anniversary, spring break, toddlers, 4 kids |
+| Mixed Cabin Edge Cases | 6 | 5 adults first class, 10-person groups |
+| Hotels with Sort + Children | 8 | Multi-room, star sort, distance, family |
+| Creative Hotel Scenarios | 8 | Anniversary, digital nomad, conference |
+| Hotels Multi-GT URLs | 8 | 2 valid destination formats per task |
+| Ultra-Complex Flights | 4 | 8–10 travelers, first class, Kangaroo route |
+| Ultra-Complex Hotels | 2 | 4-room families, VIP 8-adult groups |
 
 ---
 
