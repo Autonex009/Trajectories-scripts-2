@@ -232,13 +232,14 @@ def _get_param(query: dict, *keys: str) -> str:
     """Get the first non-empty value from query dict for any of the keys.
 
     Handles both exact keys and case-insensitive fallback.
+    Note: parse_qs() already URL-decodes values, so no unquote() is needed.
     """
     for key in keys:
         if key in query and query[key]:
-            return unquote(query[key][0])
+            return query[key][0]
         key_lower = key.lower()
         if key_lower in query and query[key_lower]:
-            return unquote(query[key_lower][0])
+            return query[key_lower][0]
     return ""
 
 
@@ -568,7 +569,7 @@ def parse_hotel_url(url: str) -> dict[str, Any]:
     )
 
     return {
-        "destination": unquote(_get_param(query, "destination")).lower().strip(),
+        "destination": _get_param(query, "destination").lower().strip(),
         "region_id": _get_param(query, "regionId", "region_id"),
         "start_date": start_date,
         "end_date": end_date,
