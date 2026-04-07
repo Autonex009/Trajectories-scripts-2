@@ -53,7 +53,10 @@ class InputDict(TypedDict, total=False):
 
 class FinalResult(BaseModel):
     score: float
-
+    n_queries: int | None = None
+    n_covered: int | None = None
+    queries: list | None = None
+    is_query_covered: list | None = None
 
 class SkyscannerVerifierResult(BaseModel):
     """Detailed verification result for Skyscanner URL matching."""
@@ -101,48 +104,6 @@ REGIONAL_TLDS = {
     "skyscanner.com.hk",
     "skyscanner.co.kr",
 }
-
-# Query parameters to IGNORE during flight comparison
-# (session, tracking, UI-state only — not user-intentional search)
-IGNORED_FLIGHT_PARAMS = {
-    "locale",
-    "market",
-    "currency",
-    "previousCultureSource",
-    "ref",
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "redirectedFrom",
-    "associateid",
-    "sdevent",
-    "utm_content",
-    "utm_term",
-    "iym",           # inbound year-month (calendar view state)
-    "oym",           # outbound year-month (calendar view state)
-    "sortby",        # flight sort is DOM-only, unreliable in URL
-}
-
-# Query parameters to IGNORE during hotel comparison
-IGNORED_HOTEL_PARAMS = {
-    "locale",
-    "market",
-    "currency",
-    "ref",
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "redirectedFrom",
-    "associateid",
-    "is_dateless",
-}
-
-# Canonical cabin class values
-CABIN_CLASSES = {"economy", "premiumeconomy", "business", "first"}
-
-# Canonical alliance values (may have spaces, e.g. "Star Alliance")
-# Browser-verified: alliances=Star Alliance (URL-encoded as Star%20Alliance)
-ALLIANCES = {"oneworld", "skyteam", "star alliance"}
 
 
 # =============================================================================
@@ -1131,9 +1092,9 @@ class SkyscannerInfoGathering(BaseMetric):
             if ptype == "flights":
                 key = f"flight-{info.get('airline')}-{info.get('departTime')}-{info.get('price')}"
             elif ptype in ["hotel_results", "hotels"]:
-                key = f"hotel-{info.get('title')}-{info.get('price')}"
+                key = f"hotel-{info.get('name')}-{info.get('price')}"
             elif ptype in ["carhire_results", "carhire"]:
-                key = f"car-{info.get('title')}-{info.get('supplier')}-{info.get('price')}"
+                key = f"car-{info.get('name')}-{info.get('supplier')}-{info.get('price')}"
             else:
                 key = str(info)
                 
@@ -1265,10 +1226,11 @@ class SkyscannerInfoGathering(BaseMetric):
                 return False
 
         if q_cabin_classes := query.get("cabin_classes"):
-            # The URL parsing part of skyscanner_url_match.js handles cabinclass
+            q_cabin_classes = query["cabin_classes"]
             q_cabin_map = {"economy": ["economy", "econ"], "business": ["business", "biz"], "first": ["first"]}
-            card_info = (info.get("cabinClass") or info.get("cabinclass") or "").lower()
-            if not any(c.lower() in card_info for c in q_cabin_classes):
+            card_info = (info.get("cabin") or "").lower()
+            allowed_terms = [t for cls in q_cabin_classes for t in q_cabin_map.get(cls, [cls])]
+            if not any(term in card_info for term in allowed_terms):
                 return False
 
         if query.get("require_direct") is True:
@@ -1289,12 +1251,12 @@ class SkyscannerInfoGathering(BaseMetric):
             if info.get("stars", 0) < query["min_stars"]: return False
             
         if "min_score" in query and query["min_score"] is not None:
-            score = info.get("score")
+            score = info.get("reviewScore")
             if score is None or score < query["min_score"]: return False
             
         # === Cars ===
         if q_car_types := query.get("car_types"):
-            info_title = (info.get("title") or "").lower()
+            info_title = (info.get("name") or "").lower()
             info_category = (info.get("category") or "").lower()
             
             type_matched = False
