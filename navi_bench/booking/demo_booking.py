@@ -248,6 +248,29 @@ SCENARIOS: list[TaskScenario] = [
             "checkoutDate": "{now() + timedelta(11)}",
         },
     ),
+    TaskScenario(
+        task_id="booking/hotels/rome/review_breakfast_budget",
+        name="Rome Hotels with Breakfast & High Rating",
+        task=(
+            "Search for a stay in Rome for 2 adults from {checkinDate} to {checkoutDate} "
+            "with a review score of 8 or higher and breakfast included under 40000. "
+            "Shortlist the most suitable hotel options that meet the criteria and are most "
+            "likely to satisfy typical traveler expectations."
+        ),
+        url="https://www.booking.com",
+        location="Italy",
+        timezone="Europe/Rome",
+        gt_url=[
+            "https://www.booking.com/searchresults.html?"
+            "ss=Rome&checkin={checkinDate}&checkout={checkoutDate}&"
+            "group_adults=2&no_rooms=1&"
+            "nflt=review_score%3D80%3Bprice%3DINR-min-40000-1%3Bmealplan%3D1"
+        ],
+        values={
+            "checkinDate": "{now() + timedelta(36)}",
+            "checkoutDate": "{now() + timedelta(40)}",
+        },
+    ),
     #---------------------FLIGHTS TASKSCENARIOS----------------------
     TaskScenario(
         task_id="booking/flights/delhi_to_paris/roundtrip",
@@ -462,6 +485,53 @@ SCENARIOS: list[TaskScenario] = [
         values={
             "puDate": "{now() + timedelta(6)}",
             "doDate": "{now() + timedelta(11)}",
+        },
+    ),
+    TaskScenario(
+        task_id="booking/cars/paris_firstweek_pickup/10",
+        name="Paris Electric Car Rental - First Week",
+        task=(
+            "Search for a fully electric rental car in Paris with pickup during the first week "
+            "of the next month and drop-off in the same week at the same location. "
+            "5-day rental"
+        ),
+        url="https://cars.booking.com",
+        location="France",
+        timezone="Europe/Paris",
+        gt_url=[
+            "https://cars.booking.com/search-results?"
+            "locationName=Paris&dropLocationName=Paris&driversAge=30&"
+            "puDay={puDateDay}&puMonth={puDateMonth}&puYear={puDateYear}&"
+            "doDay={doDateDay}&doMonth={doDateMonth}&doYear={doDateYear}&"
+            "filterCriteria_fuelType=Electric"
+        ],
+        values={
+            "puDate": "the first week of the next month",
+            "doDate": "the first week of the next month",
+        },
+    ),
+    TaskScenario(
+        task_id="booking/cars/paris_city_short_trip/6",
+        name="Paris Car Rental - Top Rated Short Trip",
+        task=(
+            "Search for a car rental in Paris with pickup on {puDate} and drop-off on {doDate} "
+            "at the same city location sorted by highest review score. "
+            "Compare top-rated options and highlight those that combine high review scores "
+            "with convenient rental conditions."
+        ),
+        url="https://cars.booking.com",
+        location="France",
+        timezone="Europe/Paris",
+        gt_url=[
+            "https://cars.booking.com/search-results?"
+            "locationName=Paris&dropLocationName=Paris&driversAge=30&"
+            "puDay={puDateDay}&puMonth={puDateMonth}&puYear={puDateYear}&"
+            "doDay={doDateDay}&doMonth={doDateMonth}&doYear={doDateYear}&"
+            "filterCriteria_sortBy=RATING&filterCriteria_sortAscending=true"
+        ],
+        values={
+            "puDate": "{now() + timedelta(15)}",
+            "doDate": "{now() + timedelta(18)}",
         },
     )
 ]
