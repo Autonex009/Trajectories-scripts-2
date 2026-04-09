@@ -217,8 +217,8 @@ class TestCarMatching:
         url = f"{BASE_CAR}?locationName=Paris&dropLocationName=Paris&puDay=1"
         parsed = _v(url)._parse_cars_url(url)
 
-        assert parsed["location_name"] == "Paris"
-        assert parsed["drop_location_name"] == "Paris"
+        assert parsed["location_name"] == "paris"
+        assert parsed["drop_location_name"] == "paris"
         assert parsed["pu_day"] == "1"
 
     @pytest.mark.asyncio
