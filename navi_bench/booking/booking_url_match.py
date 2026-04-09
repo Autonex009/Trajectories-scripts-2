@@ -318,12 +318,25 @@ class BookingUrlMatch(BaseMetric):
         nflt = self._get_param(query, "nflt")        
         if nflt:
             nflt = unquote(nflt)
-            result["filters"] = self._parse_nflt(nflt)
 
-            price_match = re.search(r"price=[A-Z]{2,3}-(?:min-)?(\d+)-(\d+)", nflt)
-            if price_match:
-                result["price_min"] = int(price_match.group(1))
-                result["price_max"] = int(price_match.group(2))
+            price_min = None
+            price_max = None
+
+            range_match = re.search(r"price=[A-Z]+-(\d+)-(\d+)-\d+", nflt)
+            if range_match:
+                price_min = int(range_match.group(1))
+                price_max = int(range_match.group(2))
+            else:
+                min_match = re.search(r"price=[A-Z]+-min-(\d+)-\d+", nflt)
+                if min_match:
+                    price_min = int(min_match.group(1))
+
+                max_match = re.search(r"price=[A-Z]+-(\d+)-max-\d+", nflt)
+                if max_match:
+                    price_max = int(max_match.group(1))
+
+            result["price_min"] = price_min
+            result["price_max"] = price_max
 
         return result
     
@@ -405,6 +418,11 @@ class BookingUrlMatch(BaseMetric):
             "filter_seat_category": set(),
             "filter_minimum_supplier_rating": set(),
             "filter_has_air_conditioning": set(),
+            "filter_provisional_extra": set(),
+            "filter_sort_by": "",
+            "filter_sort_ascending": "",
+            "filter_fuel_type": set(),
+            "filter_deposit_buckets": set(),
         }
 
         # Locations
@@ -437,6 +455,11 @@ class BookingUrlMatch(BaseMetric):
         result["filter_seat_category"] = set(query.get("filterCriteria_seatCategory", []))
         result["filter_minimum_supplier_rating"] = set(query.get("filterCriteria_minimumSupplierRating", []))
         result["filter_has_air_conditioning"] = set(query.get("filterCriteria_hasAirConditioning", []))
+        result["filter_provisional_extra"] = set(query.get("filterCriteria_provisionalExtraType", []))
+        result["filter_fuel_type"] = set(query.get("filterCriteria_fuelType", []))
+        result["filter_deposit_buckets"] = set(query.get("filterCriteria_depositBuckets", []))
+        result["filter_sort_by"] = self._get_param(query, "filterCriteria_sortBy")
+        result["filter_sort_ascending"] = self._get_param(query, "filterCriteria_sortAscending")
 
         return result
     
