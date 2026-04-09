@@ -194,8 +194,18 @@ class BookingUrlMatch(BaseMetric):
             if gt["price_max"] is not None:
                 if agent["price_max"] != gt["price_max"]:
                     return False, {"mismatches": ["price_max mismatch"]}
+            
+            # 6. Sort Order
+            if gt["order"]:
+                if not agent["order"]:
+                    return False, {"mismatches": ["order missing"]}
 
-            # 6. Filters
+                if agent["order"] != gt["order"]:
+                    return False, {
+                        "mismatches": [f"order: {agent['order']} vs {gt['order']}"]
+                    }
+
+            # 7. Filters
             match, filter_details = self._compare_filters(
                 agent["filters"], gt["filters"]
             )
@@ -295,6 +305,7 @@ class BookingUrlMatch(BaseMetric):
             "filters": {},
             "price_min": None,
             "price_max": None,
+            "order": "",
         }
 
         # Destination 
@@ -309,6 +320,9 @@ class BookingUrlMatch(BaseMetric):
         result["adults"] = self._get_param(query, "group_adults")
         result["children"] = self._get_param(query, "group_children")
         result["rooms"] = self._get_param(query, "no_rooms")
+
+        # Sort order
+        result["order"] = self._get_param(query, "order")
 
         # Ages
         if "age" in query:
@@ -331,11 +345,11 @@ class BookingUrlMatch(BaseMetric):
             else:
                 min_match = re.search(r"price=[A-Z]+-min-(\d+)-\d+", nflt)
                 if min_match:
-                    price_min = int(min_match.group(1))
+                    price_max = int(min_match.group(1))
 
                 max_match = re.search(r"price=[A-Z]+-(\d+)-max-\d+", nflt)
                 if max_match:
-                    price_max = int(max_match.group(1))
+                    price_min = int(max_match.group(1))
 
             result["price_min"] = price_min
             result["price_max"] = price_max

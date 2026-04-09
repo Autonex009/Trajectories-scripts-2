@@ -175,7 +175,7 @@ SCENARIOS: list[TaskScenario] = [
             "&checkin={checkinDate}&checkout={checkoutDate}"
             "&group_adults=2&no_rooms=1&group_children=0"
             "&nflt=mealplan%3D1"
-            "&order=review_score"
+            "&order=bayesian_review_score"
         ],
         values={
             "checkinDate": "{now() + timedelta(6)}",
