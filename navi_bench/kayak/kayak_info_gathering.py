@@ -196,7 +196,7 @@ class KayakInfoGathering(BaseMetric):
                     stops = "Direct" if item.get("stops") == 0 else f"{item.get('stops')} Stops"
                     depart = item.get("departTime", "XX:XX")
                     arrive = item.get("arrivalTime", "XX:XX")
-                    print(f"  {i}. {depart}-{arrive} | {airline} | {stops} | ₹{price}", flush=True)
+                    print(f"  {i}. {depart}-{arrive} | {airline} | {stops} | ${price}", flush=True)
                     
                 elif ptype == "hotel_results":
                     name = item.get("title", "Unknown")
@@ -207,7 +207,7 @@ class KayakInfoGathering(BaseMetric):
                 elif ptype == "car_results":
                     name = item.get("title", "Unknown")
                     provider = item.get("provider", "Unknown")
-                    print(f"  {i}. {name} | {provider} | ₹{price}", flush=True)
+                    print(f"  {i}. {name} | {provider} | ${price}", flush=True)
 
         page_type = infos[0].get("pageType", "unknown") if infos else "unknown"
         anti_bot = infos[0].get("antiBotStatus", "unknown") if infos else "unknown"
