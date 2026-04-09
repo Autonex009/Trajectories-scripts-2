@@ -119,7 +119,7 @@ class KayakInfoGathering(BaseMetric):
                 if frame != page.main_frame: return
                 
                 # --- NEW: Using frame.url to instantly block OTAs ---
-                if "kayak.co.in" not in frame.url:
+                if "kayak.com" not in frame.url:
                     return
                 # ----------------------------------------------------
                 
@@ -202,7 +202,7 @@ class KayakInfoGathering(BaseMetric):
                     name = item.get("title", "Unknown")
                     score = item.get("score", "N/A")
                     stars = item.get("stars", 0)
-                    print(f"  {i}. {name} | {stars}★ | Rating: {score} | ₹{price}", flush=True)
+                    print(f"  {i}. {name} | {stars}★ | Rating: {score} | ${price}", flush=True)
                     
                 elif ptype == "car_results":
                     name = item.get("title", "Unknown")
@@ -366,7 +366,7 @@ def generate_task_config_deterministic(
     location: str,
     timezone: str,
     timestamp: int | None = None,
-    url: str = "https://www.kayak.co.in/",
+    url: str = "https://www.kayak.com/",
     values: dict[str, str] | None = None,
 ) -> BaseTaskConfig:
     user_metadata = initialize_user_metadata(timezone, location, timestamp)
