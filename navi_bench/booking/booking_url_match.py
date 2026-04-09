@@ -442,8 +442,8 @@ class BookingUrlMatch(BaseMetric):
         }
 
         # Locations
-        result["location_name"] = self._get_param(query, "locationName")
-        result["drop_location_name"] = self._get_param(query, "dropLocationName")
+        result["location_name"] = self._get_param(query, "locationName").lower()
+        result["drop_location_name"] = self._get_param(query, "dropLocationName").lower()
 
         # Pick-up date & time
         result["pu_day"] = self._get_param(query, "puDay")
