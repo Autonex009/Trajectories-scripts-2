@@ -83,7 +83,7 @@ class TestHotelParsing:
         assert "mealplan" in r["filters"]
 
     def test_price_parsed(self):
-        url = f"{BASE_HOTEL}?nflt=price%3DINR-min-1000-5000"
+        url = f"{BASE_HOTEL}?nflt=price%3DINR-1000-5000-1"
         r = _v(url)._parse_hotel_url(url)
         assert r["price_min"] == 1000
         assert r["price_max"] == 5000
