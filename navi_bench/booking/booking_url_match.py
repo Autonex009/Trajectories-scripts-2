@@ -319,6 +319,8 @@ class BookingUrlMatch(BaseMetric):
         if nflt:
             nflt = unquote(nflt)
 
+            result["filters"] = self._parse_nflt(nflt)
+
             price_min = None
             price_max = None
 
