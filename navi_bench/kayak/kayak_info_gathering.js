@@ -104,12 +104,14 @@
 
                     const stops = Parsers.stops(rowText);
 
+                    const formattedStops = stops === 0 ? "Direct" : (stops === null ? null : `${stops} Stops`);
+
                     if (extractedPrice) {
                         collected.push({
                             source: "dom_flight_listing",
                             airline: airlineText,
                             price: extractedPrice,
-                            stops: stops === 0 ? "Direct" : `${stops} Stops`,
+                            stops: formattedStops,
                             departTime,
                             arrivalTime
                         });

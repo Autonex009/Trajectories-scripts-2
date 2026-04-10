@@ -182,7 +182,7 @@ class KayakInfoGathering(BaseMetric):
                 print("-" * 50)
                 print(">> ACTIVE GLOBALS FILTERS DETECTED:")
                 if max_p := first_info.get('filterMaxPrice'):
-                    print(f"   Max Price Slider: ₹{max_p}")
+                    print(f"   Max Price Slider: ${max_p}")
                 if airlines := first_info.get('filterAirlines'):
                     print(f"   Airlines Checked: {', '.join(airlines)}")
                 if stops := first_info.get('filterStops'):
