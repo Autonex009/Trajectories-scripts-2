@@ -57,7 +57,7 @@ class InfoDict(TypedDict, total=False):
     departTime: str
     arrivalTime: str
     airline: str
-    stops: int
+    stops: int | str  # Updated to support strings from the new JS implementation
     filterMaxStops: int
     filterAirlines: list[str]
 
@@ -132,7 +132,9 @@ class KayakInfoGathering(BaseMetric):
             page.on("framenavigated", lambda f: asyncio.create_task(on_frame_navigated(f)))
         
         for page in context.pages:
-            asyncio.create_task(track_page(page))
+            async def track_page_task(p=page):
+                await track_page(p)
+            asyncio.create_task(track_page_task())
         context.on("page", lambda p: asyncio.create_task(track_page(p)))
 
     async def update(self, **kwargs) -> None:
@@ -193,7 +195,14 @@ class KayakInfoGathering(BaseMetric):
                 
                 if ptype == "flight_results":
                     airline = item.get("airline", "Unknown").title()
-                    stops = "Direct" if item.get("stops") == 0 else f"{item.get('stops')} Stops"
+                    
+                    # Support both integer and string inputs cleanly for output
+                    raw_stops = item.get("stops")
+                    if raw_stops == 0 or (isinstance(raw_stops, str) and "direct" in raw_stops.lower()):
+                        stops = "Direct"
+                    else:
+                        stops = raw_stops if isinstance(raw_stops, str) else f"{raw_stops} Stops"
+                    
                     depart = item.get("departTime", "XX:XX")
                     arrive = item.get("arrivalTime", "XX:XX")
                     print(f"  {i}. {depart}-{arrive} | {airline} | {stops} | ${price}", flush=True)
@@ -297,8 +306,9 @@ class KayakInfoGathering(BaseMetric):
 
         # 6. Direct Flights Only
         if query.get("require_direct") is True:
-            # Check flight card OR if "Direct" is checked in the sidebar
-            card_direct = info.get("stops") == 0
+            raw_stops = info.get("stops")
+            # Parse stops considering it could be int `0` or string `"Direct"`
+            card_direct = raw_stops == 0 or (isinstance(raw_stops, str) and "direct" in raw_stops.lower())
             filter_direct = any("direct" in s.lower() for s in info.get("filterStops", []))
             
             if not (card_direct or filter_direct): 
@@ -307,7 +317,19 @@ class KayakInfoGathering(BaseMetric):
         # 7. Max Stops
         if "max_stops" in query and query["max_stops"] is not None:
             max_stops = query["max_stops"]
-            card_stops = info.get("stops")
+            raw_stops = info.get("stops")
+            card_stops = None
+            
+            # Resolve the new string value back to an integer
+            if isinstance(raw_stops, int):
+                card_stops = raw_stops
+            elif isinstance(raw_stops, str):
+                if "direct" in raw_stops.lower():
+                    card_stops = 0
+                else:
+                    match = re.search(r"(\d+)", raw_stops)
+                    if match:
+                        card_stops = int(match.group(1))
             
             # Check if card passes
             card_passes = card_stops is not None and card_stops <= max_stops
