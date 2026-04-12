@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field
 
 T = TypeVar("T")
 
-
 def get_import_path(obj: Any) -> str:
     """Get the import path of an object."""
     return f"{obj.__module__}.{obj.__qualname__}"

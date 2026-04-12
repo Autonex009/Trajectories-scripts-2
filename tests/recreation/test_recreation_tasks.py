@@ -37,7 +37,7 @@ def test_recreation_tasks_instantiate_with_recreation_verifier():
 
 
 def test_demo_recreation_loads_all_scenarios():
-    scenarios = load_scenarios()
+    scenarios = load_scenarios() 
 
     assert len(scenarios) == 25
     assert scenarios[0].task_id == "navi_bench/recreation/filters/0"

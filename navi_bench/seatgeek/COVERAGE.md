@@ -15,7 +15,7 @@ All URL patterns and DOM structures documented below have been **verified with l
 SeatGeek uses a **3-layer data model** for ticket verification:
 
 | Layer | Source | Data Available |
-|-------|--------|----------------|
+|-------|--------|----------------| 
 | **URL** | Path segments + query params | Event ID, category, performer, quantity, max_price |
 | **LD+JSON** | `<script type="application/ld+json">` | Event name, date, venue, teams, price range, inventory |
 | **DOM** | Listing buttons with `aria-label` | Section, row, quantity range, price, Deal Score |
