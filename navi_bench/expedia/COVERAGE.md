@@ -337,20 +337,19 @@ They do **not** affect search semantics and are excluded from comparison.
 
 **70 tasks** in `expedia_benchmark_tasks.csv` — **all hard difficulty**:
 
-| Category | Count | Scenarios |
+Tasks are designed with advanced difficulty strategies to challenge AI models:
+
+| Category | Count | Difficulty Strategy |
 | :--- | :---: | :--- |
-| Business RT Family Flights | 5 | 2–3 adults + children, multiple cabin classes |
-| First Class Luxury Flights | 5 | 4 adults + teen, ultra-long-haul routes |
-| Premium Economy One-Way | 5 | Children ages, international routes |
-| Creative Economy Roundtrips | 7 | Groups of 2–6 adults, nonstop preference |
-| Business One-Way Complex | 6 | Solo to 4-person corporate, children |
-| Family Roundtrip Specials | 6 | Anniversary, spring break, toddlers, 4 kids |
-| Mixed Cabin Edge Cases | 6 | 5 adults first class, 10-person groups |
-| Hotels with Sort + Children | 8 | Multi-room, star sort, distance, family |
-| Creative Hotel Scenarios | 8 | Anniversary, digital nomad, conference |
-| Hotels Multi-GT URLs | 8 | 2 valid destination formats per task |
-| Ultra-Complex Flights | 4 | 8–10 travelers, first class, Kangaroo route |
-| Ultra-Complex Hotels | 2 | 4-room families, VIP 8-adult groups |
+| Buried Traveler Counts | 8 | Adults/children hidden in prose ("my wife, myself, our twins") |
+| Indirect Cabin Class | 8 | Natural language cabin refs ("flatbed seats" = business) |
+| Tricky Children + Red Herrings | 8 | Ages in narrative, irrelevant details mixed in |
+| Complex Combinations | 8 | Multiple tricky elements combined (airport names + buried pax) |
+| Natural Language Sort | 6 | Sort described naturally ("what guests liked most" = GUEST_RATING) |
+| Multi-Room Tricky | 6 | Children distributed across rooms in narrative prose |
+| Red Herring Hotels | 10 | Extra details that don't affect URL (loyalty status, room type) |
+| Multi-GT Hotels | 8 | 2 valid destination URL encodings per task |
+| Ultra-Complex | 8 | Maximum difficulty — all tricks combined (11-person groups, lap infants) |
 
 ---
 
