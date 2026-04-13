@@ -2,6 +2,7 @@
     const HOTEL_PATH_RE = /^\/Hotels-(g\d+)-.*\.html$/i;
     const RESTAURANT_PATH_RE = /^\/(?:FindRestaurants|Restaurants)(?:$|[\/\?\-])/i;
     const CRUISE_PATH_RE = /^\/Cruises-(g\d+)-(.+?)-Cruises(?:\.html|\/|$)/i;
+    const THINGS_TO_DO_PATH_RE = /^\/(?:Attractions|Activities)-/i;
     const FILTER_GROUP_DEFINITIONS = [
         {
             key: "popularFilters",
@@ -361,6 +362,16 @@
         }
 
         return false;
+    }
+
+    function elementLooksChecked(element) {
+        if (!element) return false;
+        const ariaChecked = element.getAttribute && element.getAttribute("aria-checked");
+        const ariaSelected = element.getAttribute && element.getAttribute("aria-selected");
+        const ariaPressed = element.getAttribute && element.getAttribute("aria-pressed");
+        const dataState = element.getAttribute && element.getAttribute("data-state");
+        const checked = element.getAttribute && element.getAttribute("checked");
+        return ariaChecked === "true" || ariaSelected === "true" || ariaPressed === "true" || dataState === "checked" || checked !== null;
     }
 
     function findGroupLabel(input) {
@@ -840,6 +851,310 @@
         };
     }
 
+    function getThingsToDoLabeledCheckedOptions(selector, actionBarValues) {
+        const labels = document.querySelectorAll(selector);
+        const selected = [];
+        const textAppearsInActionBar = (text) => {
+            const normalized = cleanText(text).toLowerCase();
+            if (!normalized) return false;
+            return actionBarValues.some((value) => cleanText(value).toLowerCase().includes(normalized));
+        };
+
+        for (const label of labels) {
+            const forId = label.getAttribute("for");
+            const input = (
+                label.querySelector('input[type="checkbox"], input[type="radio"]') ||
+                (forId ? document.getElementById(forId) : null)
+            );
+            const optionRoot = label.closest('[role="checkbox"], [role="radio"], li, div, section') || label;
+            const text = cleanText(label.textContent || optionRoot.textContent || "");
+            const checked = Boolean(input && input.checked)
+                || elementLooksChecked(input)
+                || elementLooksChecked(label)
+                || elementLooksChecked(optionRoot)
+                || textAppearsInActionBar(text);
+            if (!checked) continue;
+            if (text) selected.push(text);
+        }
+        return unique(selected);
+    }
+
+    function getThingsToDoCheckedInputLabels(inputSelector) {
+        const selected = [];
+        for (const input of document.querySelectorAll(inputSelector)) {
+            const id = input.getAttribute("id") || "";
+            const label = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
+            const labelText = cleanText((label && label.textContent) || "");
+            if (labelText) selected.push(labelText);
+        }
+        return unique(selected);
+    }
+
+    function getThingsToDoSectionRootByHeading(headingPattern) {
+        const headings = [...document.querySelectorAll("h2, h3, h4, div, span")];
+        for (const node of headings) {
+            const text = cleanText(node.textContent || "");
+            if (!headingPattern.test(text)) continue;
+            const section = node.closest("section, div[role='group'], div");
+            if (section) return section;
+        }
+        return null;
+    }
+
+    function getThingsToDoTravelerRatings(actionBarValues) {
+        const section = getThingsToDoSectionRootByHeading(/^travell?er rating/i);
+        const selected = [];
+        const textAppearsInActionBar = (text) => {
+            const normalized = cleanText(text).toLowerCase();
+            if (!normalized) return false;
+            return actionBarValues.some((value) => cleanText(value).toLowerCase().includes(normalized));
+        };
+
+        if (section) {
+            const candidates = section.querySelectorAll('label, [role="checkbox"], [role="radio"], button');
+            for (const node of candidates) {
+                const titleText = cleanText(node.querySelector("svg title")?.textContent || "");
+                const text = cleanText(node.textContent || "");
+                const combined = cleanText([text, titleText].filter(Boolean).join(" "));
+                const valueText = combined || titleText || text;
+                if (!valueText) continue;
+                const input = node.querySelector('input[type="checkbox"], input[type="radio"]')
+                    || (node.getAttribute('for') ? document.getElementById(node.getAttribute('for')) : null);
+                const checked = Boolean(input && input.checked)
+                    || (input && input.getAttribute('aria-checked') === 'true')
+                    || elementLooksChecked(node)
+                    || textAppearsInActionBar(valueText);
+                if (checked) {
+                    selected.push(valueText);
+                }
+            }
+        }
+
+        for (const value of actionBarValues) {
+            if (/travell?er rating|bubbles|of 5/i.test(value)) {
+                selected.push(value);
+            }
+        }
+
+        return unique(selected);
+    }
+
+    function getThingsToDoSelectedTreeNode(containerSelector, actionBarValues) {
+        const container = document.querySelector(containerSelector);
+        if (!container) return null;
+        const selectedNode = container.querySelector(
+            "button.Dgygn, button[aria-selected='true'], button[aria-checked='true'], [role='treeitem'][aria-selected='true'], [role='treeitem'][aria-checked='true']"
+        );
+        if (selectedNode) {
+            return cleanText(selectedNode.textContent || "") || null;
+        }
+
+        const textAppearsInActionBar = (text) => {
+            const normalized = cleanText(text).toLowerCase();
+            if (!normalized) return false;
+            return actionBarValues.some((value) => cleanText(value).toLowerCase().includes(normalized));
+        };
+
+        for (const node of container.querySelectorAll("div.XDHza, li, button, a")) {
+            const text = cleanText(node.textContent || "");
+            if (!text) continue;
+            if (
+                node.classList?.contains("Dgygn") ||
+                node.querySelector?.(".Dgygn") ||
+                elementLooksChecked(node) ||
+                textAppearsInActionBar(text)
+            ) {
+                return text;
+            }
+        }
+
+        return null;
+    }
+
+    function getThingsToDoDateRange() {
+        const button = document.querySelector('button[aria-haspopup="dialog"]');
+        if (!button) return { label: null, ariaLabel: null };
+        return {
+            label: cleanText(button.textContent || "") || null,
+            ariaLabel: cleanText(button.getAttribute("aria-label") || "") || null,
+        };
+    }
+
+    function normalizeThingsToDoSortLabel(value) {
+        const text = cleanText(value || "");
+        if (!text) return "";
+        const cleaned = text
+            .replace(/^sorted\s+by\s+/i, "")
+            .replace(/^sort\s+by\s+/i, "")
+            .replace(/^sort\s+/i, "")
+            .trim();
+        const normalized = cleaned
+            .replace(/\btraveller\b/gi, "Traveler")
+            .replace(/\bfavourites\b/gi, "Favorites")
+            .trim();
+        if (/traveler\s+ranking/i.test(normalized)) return "Traveler favorites";
+        return normalized;
+    }
+
+    function decodeThingsToDoSortToken(token) {
+        const raw = cleanText(token || "");
+        if (!raw) return "";
+        const decoded = raw.replace(/__5f__/gi, " ").replace(/_/g, " ").trim();
+        if (!decoded) return "";
+        if (decoded.toLowerCase() === "featured") return "Featured";
+        return decoded.replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+
+    function getThingsToDoSortOrder(pathname) {
+        const sortButton = document.querySelector(
+            '#sort-filter-menu button[aria-haspopup="listbox"], ' +
+            '[data-automation="sort-filter-menu"] button[aria-haspopup="listbox"], ' +
+            '[data-automation="SortingListButton"] button[aria-haspopup="listbox"]'
+        );
+
+        const sortAriaLabel = normalizeThingsToDoSortLabel(sortButton?.getAttribute("aria-label") || "");
+        if (sortAriaLabel) return sortAriaLabel;
+
+        const sortButtonText = normalizeThingsToDoSortLabel(sortButton?.textContent || "");
+        if (sortButtonText) return sortButtonText;
+
+        const selectedOption = document.querySelector('[role="listbox"] [role="option"][aria-selected="true"] .PqcNG')
+            || document.querySelector('[role="listbox"] [role="option"][aria-selected="true"] span.biGQs')
+            || document.querySelector('[role="listbox"] [role="option"][aria-selected="true"]');
+        const selectedText = normalizeThingsToDoSortLabel(selectedOption?.textContent || "");
+        if (selectedText) return selectedText;
+
+        const sortToken = pathname.match(/a_sort\.([A-Z0-9_]+)-/i)?.[1] || "";
+        const decodedToken = decodeThingsToDoSortToken(sortToken);
+        if (decodedToken) return decodedToken;
+
+        const buttons = document.querySelectorAll('div[data-automation="actionBar"] button');
+        for (const button of buttons) {
+            const buttonText = cleanText(button.textContent || "");
+            if (!/sort/i.test(buttonText)) continue;
+            const label = normalizeThingsToDoSortLabel(button.querySelector("span.biGQs")?.textContent || buttonText);
+            return label || null;
+        }
+        return null;
+    }
+
+    function getThingsToDoSearchRefreshState() {
+        const el = document.querySelector('[data-automation="search_in_progress_message"]');
+        if (!el) return { present: false, visible: false, text: null };
+        const style = window.getComputedStyle(el);
+        const visible = style.display !== "none" && style.visibility !== "hidden" && cleanText(el.textContent || "") !== "";
+        return {
+            present: true,
+            visible,
+            text: cleanText(el.textContent || "") || null,
+        };
+    }
+
+    function getThingsToDoPriceSliders() {
+        const sliders = [...document.querySelectorAll('div#price_filter_contents div[role="slider"]')];
+        const values = {};
+        for (const slider of sliders) {
+            const label = cleanText(slider.getAttribute("aria-label") || "");
+            const value = slider.getAttribute("aria-valuenow");
+            if (label && value) values[label] = value;
+        }
+        return values;
+    }
+
+    function getThingsToDoResultsSample() {
+        return [...document.querySelectorAll('div[data-automation="LeftRailMain"] div[data-automation="cardWrapper"]')]
+            .slice(0, 10)
+            .map((card) => {
+                const saveButton = [...card.querySelectorAll('[data-automation^="trips-save-button-item-"]')][0];
+                const saveAutomation = saveButton?.getAttribute("data-automation") || "";
+                const idMatch = saveAutomation.match(/trips-save-button-item-(\d+)/);
+                const titleNode = card.querySelector("h3.biGQs div.ATCbm") || card.querySelector("h3");
+                let title = cleanText(titleNode?.textContent || "");
+                title = title.replace(/^\d+\.\s*/, "");
+                const offerRoot = card.querySelector('div[data-automation="cardSpecialOfferTags"]') || card;
+                const offerTags = unique(
+                    [...offerRoot.querySelectorAll('*')]
+                        .map((node) => cleanText(node.textContent || node.innerText || ""))
+                        .filter(Boolean)
+                );
+                return {
+                    listingId: idMatch ? idMatch[1] : null,
+                    title: title || null,
+                    bubbleRating: cleanText(card.querySelector('svg[data-automation="bubbleRatingImage"] title')?.textContent || "") || null,
+                    reviewCount: cleanText(card.querySelector('div[data-automation="bubbleReviewCount"]')?.textContent || "") || null,
+                    price: cleanText(card.querySelector('div[data-automation="cardPrice"]')?.textContent || "") || null,
+                    offerTags,
+                };
+            });
+    }
+
+    function extractThingsToDoCitySlugFromPath(url) {
+        const match = url.pathname.match(/\/(?:Attractions|Activities)-g\d+-(?:.*-)?([A-Za-z][A-Za-z0-9_]+)\.html/i);
+        return match ? match[1] : null;
+    }
+
+    function getThingsToDoState(urlState) {
+        const pathname = window.location.pathname;
+        const hasResults = document.querySelectorAll('div[data-automation="LeftRailMain"] div[data-automation="cardWrapper"]').length > 0;
+        const hasActionBar = Boolean(document.querySelector('div[data-automation="actionBar"]'));
+        const actionBarValues = collectActionBarValues();
+        const groups = {
+            languages: getThingsToDoLabeledCheckedOptions('label[for^="main_language_"]', actionBarValues),
+            uniqueExperiences: getThingsToDoLabeledCheckedOptions('label[for^="main_themes_"]', actionBarValues),
+            timeOfDay: getThingsToDoLabeledCheckedOptions('label[for^="main_timeOfDay_"]', actionBarValues),
+            duration: getThingsToDoLabeledCheckedOptions('label[for^="main_duration_"]', actionBarValues),
+            accessibility: getThingsToDoLabeledCheckedOptions('label[for^="main_accessibilityTag_"]', actionBarValues),
+            awards: getThingsToDoLabeledCheckedOptions('label[for^="main_awardCategories_"]', actionBarValues),
+            neighborhoods: unique([
+                ...getThingsToDoLabeledCheckedOptions('label[for^="main_neighborhood_"]', actionBarValues),
+                ...getThingsToDoCheckedInputLabels('input[id^="main_neighborhood_"]:checked'),
+            ]),
+            destinationGeo: unique([
+                ...getThingsToDoLabeledCheckedOptions('label[for^="main_destinationGeo_"]', actionBarValues),
+                ...getThingsToDoCheckedInputLabels('input[id^="main_destinationGeo_"]:checked'),
+            ]),
+            anyTag: unique([
+                ...getThingsToDoLabeledCheckedOptions('label[for^="main_anyTag_"]', actionBarValues),
+                ...getThingsToDoCheckedInputLabels('input[id^="main_anyTag_"]:checked'),
+            ]),
+            typeLevel3: getThingsToDoLabeledCheckedOptions('div#type_filter_contents label[for^="main_type_"]', actionBarValues),
+            travelerRatings: getThingsToDoTravelerRatings(actionBarValues),
+        };
+        const tierSelections = {
+            navbar: getThingsToDoSelectedTreeNode('div[data-filter-name="navbar"]', actionBarValues),
+            category: getThingsToDoSelectedTreeNode('div[data-filter-name="category"]', actionBarValues),
+            type: getThingsToDoSelectedTreeNode('div[data-filter-name="type"]', actionBarValues),
+        };
+        const activeFilters = unique([
+            ...actionBarValues,
+            ...Object.values(groups).flat(),
+            tierSelections.navbar || "",
+            tierSelections.category || "",
+            tierSelections.type || "",
+        ].filter(Boolean));
+
+        return {
+            pageType: THINGS_TO_DO_PATH_RE.test(pathname) && (hasResults || hasActionBar) ? "things_to_do_results" : urlState.pageType,
+            geographicId: urlState.geographicId || (pathname.match(/-g(\d+)/i)?.[1] || null),
+            citySlug: urlState.citySlug || extractThingsToDoCitySlugFromPath(new URL(window.location.href)),
+            cityName: cleanText(
+                document.querySelector('[data-automation="navHeader_Tourism"] a')?.textContent ||
+                document.querySelector('[data-automation="navHeader_Tourism"]')?.textContent ||
+                ""
+            ) || null,
+            actionBarValues,
+            activeFilters,
+            selectedFiltersByGroup: groups,
+            sortOrder: getThingsToDoSortOrder(pathname),
+            dateRange: getThingsToDoDateRange(),
+            refreshState: getThingsToDoSearchRefreshState(),
+            tierSelections,
+            priceSlider: getThingsToDoPriceSliders(),
+            resultsCount: document.querySelectorAll('div[data-automation="LeftRailMain"] div[data-automation="cardWrapper"]').length,
+            resultsSample: getThingsToDoResultsSample(),
+        };
+    }
+
     function emptyCruiseFilterGroups() {
         return {
             deals: [],
@@ -1137,6 +1452,7 @@
         const hotelMatch = url.pathname.match(HOTEL_PATH_RE);
         const restaurantMatch = url.pathname.match(RESTAURANT_PATH_RE);
         const cruiseMatch = url.pathname.match(CRUISE_PATH_RE);
+        const thingsToDoMatch = url.pathname.match(/(?:Attractions|Activities)-g(\d+)/i);
         const occupancy = parseOccupancyState();
         const pageText = document.body ? cleanText(document.body.innerText || document.body.textContent).toLowerCase() : "";
         const antiBotStatus =
@@ -1154,10 +1470,11 @@
             url: url.href,
             pageType: hotelMatch ? "hotel_results" : restaurantMatch ? "restaurant_results" : cruiseMatch ? "cruise_results" : "other",
             antiBotStatus,
-            geographicId: hotelMatch ? hotelMatch[1].toLowerCase() : cruiseMatch ? cruiseMatch[1].toLowerCase() : null,
+            geographicId: hotelMatch ? hotelMatch[1].toLowerCase() : cruiseMatch ? cruiseMatch[1].toLowerCase() : thingsToDoMatch ? `g${thingsToDoMatch[1].toLowerCase()}` : null,
             citySlug:
                 extractCitySlugFromPath(url) ||
                 extractCruiseLocationSlugFromPath(url) ||
+                extractThingsToDoCitySlugFromPath(url) ||
                 extractCitySlugFromRestaurantPath(url) ||
                 extractCitySlugFromTitle() ||
                 extractCitySlugFromTourismNavHeader(),
@@ -1177,6 +1494,7 @@
         [...collectSelectedFilterPills(), ...selectedFilterBarValues],
     ));
     const urlState = getUrlState();
+    const thingsToDoState = getThingsToDoState(urlState);
     const cruiseActionBarState = getCruiseActionBarState();
     const cruiseDateSelection = getCruiseDateSelection();
     const cruiseGroups = mergeCruiseSelections(collectCruiseFilterGroups(), cruiseActionBarState);
@@ -1200,13 +1518,14 @@
     const activeFilters = urlState.pageType === "cruise_results" ? cruiseActiveFilters : defaultActiveFilters;
 
     return {
-        ...urlState,
+        ...(thingsToDoState.pageType === "things_to_do_results" ? { ...urlState, ...thingsToDoState } : urlState),
         ...extractLdJsonHotelState(),
         checkIn: checkIn.iso || checkIn.raw,
         checkOut: checkOut.iso || checkOut.raw,
         departureMonth: cruiseDateSelection.currentMonth,
         reservationTime: reservationTime.raw,
-        activeFilters,
+        activeFilters: thingsToDoState.pageType === "things_to_do_results" ? thingsToDoState.activeFilters : activeFilters,
+        actionBarValues: thingsToDoState.pageType === "things_to_do_results" ? thingsToDoState.actionBarValues : collectActionBarValues(),
         selectedFilterBarValues: urlState.pageType === "cruise_results" ? cruiseActionBarState.all : selectedFilterBarValues,
         brands: groupedFilters.brands,
         amenities: groupedFilters.amenities,
@@ -1232,7 +1551,7 @@
         diets: groupedFilters.diets,
         diningOptions: groupedFilters.diningOptions,
         priceTypes: groupedFilters.priceTypes,
-        selectedFiltersByGroup: {
+        selectedFiltersByGroup: thingsToDoState.pageType === "things_to_do_results" ? thingsToDoState.selectedFiltersByGroup : {
             popularFilters: groupedFilters.popularFilters,
             deals: groupedFilters.deals,
             propertyTypes: groupedFilters.propertyTypes,
@@ -1258,8 +1577,15 @@
             diningOptions: groupedFilters.diningOptions,
             priceTypes: groupedFilters.priceTypes,
         },
+        dateRange: thingsToDoState.pageType === "things_to_do_results" ? thingsToDoState.dateRange : { label: null, ariaLabel: null },
+        refreshState: thingsToDoState.pageType === "things_to_do_results" ? thingsToDoState.refreshState : { present: false, visible: false, text: null },
+        tierSelections: thingsToDoState.pageType === "things_to_do_results" ? thingsToDoState.tierSelections : {},
+        priceSlider: thingsToDoState.pageType === "things_to_do_results" ? thingsToDoState.priceSlider : {},
+        resultsCount: thingsToDoState.pageType === "things_to_do_results" ? thingsToDoState.resultsCount : 0,
+        resultsSample: thingsToDoState.pageType === "things_to_do_results" ? thingsToDoState.resultsSample : [],
+        cityName: thingsToDoState.pageType === "things_to_do_results" ? thingsToDoState.cityName : null,
         priceRange: getPriceRangeState(),
         distanceFrom: getDistanceState(),
-        sortOrder: urlState.pageType === "cruise_results" ? getCruiseSortOrder() : getSortOrder(),
+        sortOrder: thingsToDoState.pageType === "things_to_do_results" ? thingsToDoState.sortOrder : (urlState.pageType === "cruise_results" ? getCruiseSortOrder() : getSortOrder()),
     };
 })();
