@@ -378,7 +378,7 @@ class TripAdvisorHotelGathering(BaseInfoGathering):
 
     def _select_best_result_info(self, candidate_infos: list[InfoDict]) -> InfoDict | None:
         best_info: InfoDict | None = None
-        best_key: tuple[int, int, int] | None = None
+        best_key: tuple[int, int, int, int] | None = None
 
         for info in candidate_infos:
             coverage_count = sum(
@@ -403,7 +403,13 @@ class TripAdvisorHotelGathering(BaseInfoGathering):
         requested_misses = info.get("requestedMisses") or []
         requested_matches = info.get("requestedMatches") or []
         requested_extras = info.get("requestedExtras") or []
-        return not requested_misses and not requested_extras and bool(requested_matches)
+        if requested_misses or requested_extras or not requested_matches:
+            return False
+        # Brand matches come from the hotel title, which is visible even on
+        # fully-blocked pages and is therefore unreliable. Require at least one
+        # structural match (guests, rooms, dates, star rating, filters, etc.)
+        # before treating a blocked page as scoreable.
+        return any(not m.startswith("brand:") for m in requested_matches)
 
     @classmethod
     def _check_multi_candidate_query(cls, query: MultiCandidateQuery, info: InfoDict) -> bool:
@@ -839,6 +845,14 @@ class TripAdvisorHotelGathering(BaseInfoGathering):
         normalized = normalized.replace("+", " plus ")
         normalized = normalized.replace("/", " ")
         normalized = normalized.replace("-", " ")
+        # Canonicalize "wi fi" → "wifi" so "Free Wi-Fi" matches "Free Wifi"
+        normalized = normalized.replace("wi fi", "wifi")
+        # Canonicalize bubble ratings: "4 of 5 bubbles and up" → "4 plus bubbles"
+        normalized = re.sub(
+            r"(\d+)\s+of\s+5\s+bubbles?", r"\1 plus bubbles", normalized
+        )
+        # Strip "and up" suffix which adds no matching value
+        normalized = re.sub(r"\s*\band\s+up\b", "", normalized)
         normalized = " ".join(normalized.split())
         return normalized
 
@@ -864,20 +878,6 @@ class TripAdvisorHotelGathering(BaseInfoGathering):
                 candidates.append(TripAdvisorHotelGathering._normalize_filter_text(value))
         return list(dict.fromkeys(candidates))
 
-    def _diagnose_requested_fields(self, info: InfoDict) -> tuple[list[str], list[str]]:
-        best_matches: list[str] = []
-        best_misses: list[str] | None = None
-
-        for alternatives in self.queries:
-            for query in alternatives:
-                matches, misses = self._diagnose_single_query(query, info)
-                if best_misses is None or len(misses) < len(best_misses):
-                    best_matches = matches
-                    best_misses = misses
-                if not misses:
-                    return matches, misses
-
-        return best_matches, best_misses or []
 
     @classmethod
     def _diagnose_single_query(cls, query: MultiCandidateQuery, info: InfoDict) -> tuple[list[str], list[str]]:
@@ -1125,7 +1125,7 @@ class TripAdvisorHotelGathering(BaseInfoGathering):
             "amenities",
             "styles",
             "propertyTypes",
-            "brands",
+            "brand",
             "deals",
             "awards",
             "neighborhoods",
@@ -1149,6 +1149,10 @@ class TripAdvisorHotelGathering(BaseInfoGathering):
             for value in query.get(field) or []:
                 candidates.add(cls._normalize_filter_text(value))
 
+        if (min_stars := query.get("min_stars")) is not None:
+            candidates.add(cls._normalize_filter_text(f"{min_stars} star"))
+            candidates.add(cls._normalize_filter_text(f"{min_stars} stars"))
+
         if cities := query.get("cities"):
             for city in cities:
                 candidates.add(cls._normalize_filter_text(city))
@@ -1171,39 +1175,18 @@ class TripAdvisorHotelGathering(BaseInfoGathering):
     def _detect_extra_filters(cls, query: MultiCandidateQuery, info: InfoDict) -> list[str]:
         expected = cls._expected_filter_candidates(query)
 
-        # Collect from all sources, not just activeFilters, since individual
-        # groups may be populated even when activeFilters is empty (e.g., on
-        # FindRestaurants pages or when anti-bot partially blocks rendering).
-        all_source_keys = [
-            "activeFilters",
-            "selectedFilterBarValues",
-            "cuisines",
-            "dishes",
-            "establishmentTypes",
-            "mealTypes",
-            "diets",
-            "diningOptions",
-            "styles",
-            "awards",
-            "priceTypes",
-            "amenities",
-            "brands",
-            "deals",
-            "propertyTypes",
-            "cruiseLines",
-            "departingFrom",
-            "cruiseLengths",
-            "cruiseStyles",
-            "ships",
-            "cabinTypes",
-            "ports",
-            "neighborhoods",
-            "travelerRatings",
-            "hotelClasses",
-            "popularFilters",
-        ]
-        all_active = cls._collect_filter_candidates(info, all_source_keys)
-        if not all_active:
+        # Only activeFilters and selectedFilterBarValues represent filters the
+        # user explicitly applied. Individual category fields (styles, amenities,
+        # brands, etc.) reflect sidebar items that may be visible but unselected,
+        # so scanning them produces false extras.
+        raw_values: list[str] = []
+        for key in ("activeFilters", "selectedFilterBarValues"):
+            for value in info.get(key, []) or []:
+                raw_values.append(value)
+            for value in (info.get("selectedFiltersByGroup", {}) or {}).get(key, []) or []:
+                raw_values.append(value)
+
+        if not raw_values:
             return []
 
         is_restaurant = info.get("pageType") == "restaurant_results"
@@ -1211,12 +1194,13 @@ class TripAdvisorHotelGathering(BaseInfoGathering):
 
         extras = []
         seen = set()
-        for active in all_active:
-            if (query.get("min_price") is not None or query.get("max_price") is not None) and re.fullmatch(r"\$?\d[\d,]*(?:\.\d+)?(?:\s+\$?\d[\d,]*(?:\.\d+)?)+", active):
+        for original in raw_values:
+            normalized = cls._normalize_filter_text(original)
+            if (query.get("min_price") is not None or query.get("max_price") is not None) and re.fullmatch(r"\$?\d[\d,]*(?:\.\d+)?(?:\s+\$?\d[\d,]*(?:\.\d+)?)+", normalized):
                 continue
-            if active and active not in expected and active not in ignorable and active not in seen:
-                extras.append(active)
-                seen.add(active)
+            if normalized and normalized not in expected and normalized not in ignorable and normalized not in seen:
+                extras.append(original)
+                seen.add(normalized)
         return extras
 
     def _diagnose_requested_fields(self, info: InfoDict) -> tuple[list[str], list[str], list[str]]:

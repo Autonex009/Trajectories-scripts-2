@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/tripadvisor/test_tripadvisor_info_gathering.py --tb=short -q)"
+    ]
+  }
+}

@@ -248,16 +248,12 @@ class TestBrandMatching:
         assert TripAdvisorHotelGathering._check_multi_candidate_query(query, info) is True
 
     def test_brand_in_sidebar_filter(self):
-        """Test brand matched via hotel name substring (primary matching path).
-        
-        Note: The query field is 'brand' (singular) while _expected_filter_candidates
-        checks 'brands' (plural), so brand values in the info's brands list would be
-        treated as extras. Real-world matching relies on hotelName containing the brand.
-        """
+        """Test brand matched via brands sidebar list."""
         query = MultiCandidateQuery(brand=["OYO"], cities=["india"])
         info = InfoDict(
             pageType="hotel_results",
-            hotelName="OYO Premium Hotel",
+            hotelName="Some Hotel",
+            brands=["OYO"],
             citySlug="India",
         )
         assert TripAdvisorHotelGathering._check_multi_candidate_query(query, info) is True
@@ -527,7 +523,7 @@ class TestStarRatings:
 
     def test_min_stars_match_via_hotel_classes(self):
         """Test star rating matched in hotelClasses filter list."""
-        query = MultiCandidateQuery(cities=["tokyo"], min_stars=4, required_filters=["4 Star"])
+        query = MultiCandidateQuery(cities=["tokyo"], min_stars=4)
         info = InfoDict(
             pageType="hotel_results",
             citySlug="Tokyo",
@@ -538,7 +534,7 @@ class TestStarRatings:
 
     def test_min_stars_match_via_popular_filters(self):
         """Test star rating matched in popularFilters."""
-        query = MultiCandidateQuery(cities=["tokyo"], min_stars=5, required_filters=["5 Star"])
+        query = MultiCandidateQuery(cities=["tokyo"], min_stars=5)
         info = InfoDict(
             pageType="hotel_results",
             citySlug="Tokyo",
@@ -1038,8 +1034,8 @@ class TestExtraFilterDetection:
             pageType="hotel_results",
             citySlug="Dubai",
             amenities=["Free Wifi"],
-            styles=["Luxury"],  # unexpected extra filter
-            activeFilters=[],
+            styles=["Luxury"],  # sidebar item — not user-selected, should not trigger
+            activeFilters=["Luxury"],  # explicitly applied by user → unexpected extra
         )
         assert TripAdvisorHotelGathering._check_multi_candidate_query(query, info) is False
 
@@ -1090,7 +1086,7 @@ class TestCombinedHotelQueries:
         assert TripAdvisorHotelGathering._check_multi_candidate_query(query, info) is True
 
     def test_india_oyo_5star(self):
-        """Test combined: brand (via hotelName) + city + min_stars (via required_filters)."""
+        """Test combined: brand + city + min_stars."""
         query = MultiCandidateQuery(
             brand=["OYO"],
             cities=["India"],
@@ -1099,7 +1095,6 @@ class TestCombinedHotelQueries:
             check_in="2026-04-25",
             check_out="2026-04-26",
             min_stars=5,
-            required_filters=["5 Star"],
         )
         info = InfoDict(
             pageType="hotel_results",
@@ -1110,7 +1105,6 @@ class TestCombinedHotelQueries:
             checkIn="2026-04-25",
             checkOut="2026-04-26",
             hotelClasses=["5 Star"],
-            selectedFilterBarValues=["5 Star"],
         )
         assert TripAdvisorHotelGathering._check_multi_candidate_query(query, info) is True
 
@@ -1132,6 +1126,34 @@ class TestCombinedHotelQueries:
             styles=["Luxury"],
         )
         assert TripAdvisorHotelGathering._check_multi_candidate_query(query, info) is False
+
+    def test_singapore_4bubbles_wifi(self):
+        """Test Singapore task: Free Wifi + 4+ Bubbles with DOM text variations.
+
+        Regression test for: TripAdvisor renders bubble filters as
+        '4 of 5 bubbles and up' and wifi as 'Free Wi-Fi' in the DOM,
+        but the query uses '4+ Bubbles' and 'Free Wifi'.
+        """
+        query = MultiCandidateQuery(
+            cities=["Singapore"],
+            guests=2,
+            rooms=1,
+            check_in="2026-10-02",
+            check_out="2026-10-04",
+            amenities=["Free Wifi"],
+            required_filters=["4+ Bubbles"],
+        )
+        # Simulate what TripAdvisor actually renders in the DOM
+        info = InfoDict(
+            pageType="hotel_results",
+            citySlug="Singapore",
+            guests=2,
+            rooms=1,
+            checkIn="2026-10-02",
+            checkOut="2026-10-04",
+            selectedFilterBarValues=["Free Wi-Fi", "4 of 5 bubbles and up"],
+        )
+        assert TripAdvisorHotelGathering._check_multi_candidate_query(query, info) is True
 
 
 # =============================================================================
@@ -1331,6 +1353,58 @@ class TestNormalizeFilterText:
     def test_selected_suffix_stripped(self):
         result = TripAdvisorHotelGathering._normalize_filter_text("Luxury selected")
         assert "luxury" in result
+
+    def test_wifi_canonicalization(self):
+        """Test that 'Free Wi-Fi' normalizes to match 'Free Wifi'."""
+        assert TripAdvisorHotelGathering._normalize_filter_text("Free Wi-Fi") == "free wifi"
+        assert TripAdvisorHotelGathering._normalize_filter_text("Free Wifi") == "free wifi"
+
+    def test_bubble_rating_canonicalization(self):
+        """Test that '4 of 5 bubbles and up' normalizes to '4 plus bubbles'."""
+        result = TripAdvisorHotelGathering._normalize_filter_text("4 of 5 bubbles and up")
+        assert result == "4 plus bubbles"
+
+    def test_bubble_rating_without_and_up(self):
+        """Test that '5 of 5 bubbles' normalizes to '5 plus bubbles'."""
+        result = TripAdvisorHotelGathering._normalize_filter_text("5 of 5 bubbles")
+        assert result == "5 plus bubbles"
+
+    def test_bubble_plus_format(self):
+        """Test that '4+ Bubbles' normalizes to '4 plus bubbles'."""
+        result = TripAdvisorHotelGathering._normalize_filter_text("4+ Bubbles")
+        assert result == "4 plus bubbles"
+
+    def test_and_up_standalone_stripped(self):
+        """Test that standalone 'and up' is stripped to empty."""
+        result = TripAdvisorHotelGathering._normalize_filter_text("and up")
+        assert result == ""
+
+    def test_and_up_suffix_stripped(self):
+        """Test that trailing 'and up' is stripped from filter text."""
+        result = TripAdvisorHotelGathering._normalize_filter_text("4 plus bubbles and up")
+        assert "and up" not in result
+
+
+# =============================================================================
+# Helper: _collect_filter_candidates
+# =============================================================================
+
+
+class TestCollectFilterCandidates:
+    """Test the _collect_filter_candidates static method."""
+
+    def test_collect_filter_candidates_ignores_zero_groups(self):
+        """selectedFiltersByGroup values of 0 (integer count) are skipped; string
+        values are normalized — hyphens become spaces so 'Family-Friendly' → 'family friendly'."""
+        info = InfoDict(
+            selectedFiltersByGroup={
+                "styles": ["Family-Friendly"],
+                "amenities": 0,
+            }
+        )
+        candidates = TripAdvisorHotelGathering._collect_filter_candidates(info, ["styles", "amenities"])
+        assert "family friendly" in candidates
+        assert "family-friendly" not in candidates
 
 
 # =============================================================================
@@ -1874,6 +1948,31 @@ class TestTaskConfigGeneration:
         injected_query = config.eval_config["queries"][0][0]
         # departure_month uses rendered_value (not iso_date)
         assert injected_query["departure_month"] == "May 2026"
+
+    def test_tasks_csv_rows_parse_and_generate_configs(self):
+        """Every row in tasks.csv must declare a valid target function and a
+        TripAdvisor start-URL. Ten rows legitimately use
+        generate_thingstodo_task_config_deterministic and ten restaurant rows use
+        /Restaurants — both must be accepted."""
+        import csv
+        import json
+        from pathlib import Path
+
+        valid_targets = {
+            "navi_bench.tripadvisor.tripadvisor_info_gathering.generate_task_config_deterministic",
+            "navi_bench.tripadvisor.tripadvisor_info_gathering.generate_thingstodo_task_config_deterministic",
+        }
+        csv_path = Path(__file__).parent.parent.parent / "navi_bench" / "tripadvisor" / "tasks.csv"
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                raw_config = json.loads(row["task_generation_config_json"])
+                assert raw_config["_target_"] in valid_targets, (
+                    f"Row {row['task_id']}: unexpected target {raw_config['_target_']!r}"
+                )
+                assert raw_config["url"].startswith("https://www.tripadvisor.com"), (
+                    f"Row {row['task_id']}: unexpected url {raw_config['url']!r}"
+                )
 
 
 # =============================================================================
