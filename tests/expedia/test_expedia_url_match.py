@@ -877,7 +877,8 @@ class TestEdgeCases:
         )
         match, details = _match(agent, gt)
         assert match is False
-        assert any("Children ages" in m for m in details["mismatches"])
+        # With strict matching, the children COUNT is caught as missing before ages
+        assert any("Children" in m for m in details["mismatches"])
 
 
 # =============================================================================

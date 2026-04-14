@@ -373,6 +373,7 @@ def _parse_passengers(passengers_str: str) -> dict[str, Any]:
         "adults": "",
         "children": "",
         "children_ages": [],
+        "infantinlap": "",
     }
 
     if not passengers_str:
@@ -410,7 +411,8 @@ def _parse_passengers(passengers_str: str) -> dict[str, Any]:
                     i += 1
                     ages.append(parts[i].strip())
                 result["children_ages"] = sorted([a for a in ages if a])
-            # infantinlap is ignored
+            elif key == "infantinlap":
+                result["infantinlap"] = value.upper()
         i += 1
 
     return result
@@ -448,6 +450,7 @@ def parse_flight_url(url: str) -> dict[str, Any]:
         "adults": "",
         "children": "",
         "children_ages": [],
+        "infantinlap": "",
     }
 
     # Trip type
@@ -484,6 +487,7 @@ def parse_flight_url(url: str) -> dict[str, Any]:
         result["adults"] = pax["adults"]
         result["children"] = pax["children"]
         result["children_ages"] = pax["children_ages"]
+        result["infantinlap"] = pax.get("infantinlap", "")
 
     return result
 
@@ -810,7 +814,12 @@ class ExpediaUrlMatch(BaseMetric):
 
         # 5. Trip type
         if gt["trip_type"]:
-            if agent["trip_type"] and agent["trip_type"] != gt["trip_type"]:
+            if not agent["trip_type"]:
+                details["mismatches"].append(
+                    f"Trip type missing (expected '{gt['trip_type']}')"
+                )
+                return False, details
+            if agent["trip_type"] != gt["trip_type"]:
                 details["mismatches"].append(
                     f"Trip type: '{agent['trip_type']}' vs '{gt['trip_type']}'"
                 )
@@ -818,7 +827,12 @@ class ExpediaUrlMatch(BaseMetric):
 
         # 6. Cabin class
         if gt["cabin_class"]:
-            if agent["cabin_class"] and agent["cabin_class"] != gt["cabin_class"]:
+            if not agent["cabin_class"]:
+                details["mismatches"].append(
+                    f"Cabin class missing (expected '{gt['cabin_class']}')"
+                )
+                return False, details
+            if agent["cabin_class"] != gt["cabin_class"]:
                 details["mismatches"].append(
                     f"Cabin class: '{agent['cabin_class']}' vs '{gt['cabin_class']}'"
                 )
@@ -826,7 +840,12 @@ class ExpediaUrlMatch(BaseMetric):
 
         # 7. Adults
         if gt["adults"]:
-            if agent["adults"] and agent["adults"] != gt["adults"]:
+            if not agent["adults"]:
+                details["mismatches"].append(
+                    f"Adults missing (expected '{gt['adults']}')"
+                )
+                return False, details
+            if agent["adults"] != gt["adults"]:
                 details["mismatches"].append(
                     f"Adults: '{agent['adults']}' vs '{gt['adults']}'"
                 )
@@ -834,7 +853,12 @@ class ExpediaUrlMatch(BaseMetric):
 
         # 8. Children count
         if gt["children"]:
-            if agent["children"] and agent["children"] != gt["children"]:
+            if not agent["children"]:
+                details["mismatches"].append(
+                    f"Children count missing (expected '{gt['children']}')"
+                )
+                return False, details
+            if agent["children"] != gt["children"]:
                 details["mismatches"].append(
                     f"Children: '{agent['children']}' vs '{gt['children']}'"
                 )
@@ -850,6 +874,16 @@ class ExpediaUrlMatch(BaseMetric):
             if sorted(agent["children_ages"]) != sorted(gt["children_ages"]):
                 details["mismatches"].append(
                     f"Children ages: {agent['children_ages']} vs {gt['children_ages']}"
+                )
+                return False, details
+
+        # 10. Infant in lap (only validate when GT expects a lap infant)
+        gt_infant = gt.get("infantinlap", "")
+        agent_infant = agent.get("infantinlap", "")
+        if gt_infant == "Y":
+            if agent_infant != "Y":
+                details["mismatches"].append(
+                    f"Infant in lap: expected 'Y' but got '{agent_infant or 'missing'}'"
                 )
                 return False, details
 
@@ -927,7 +961,12 @@ class ExpediaUrlMatch(BaseMetric):
 
         # 4. Adults
         if gt["adults"]:
-            if agent["adults"] and agent["adults"] != gt["adults"]:
+            if not agent["adults"]:
+                details["mismatches"].append(
+                    f"adults missing (expected '{gt['adults']}')"
+                )
+                return False, details
+            if agent["adults"] != gt["adults"]:
                 details["mismatches"].append(
                     f"adults: '{agent['adults']}' vs '{gt['adults']}'"
                 )
@@ -935,7 +974,12 @@ class ExpediaUrlMatch(BaseMetric):
 
         # 5. Rooms
         if gt["rooms"]:
-            if agent["rooms"] and agent["rooms"] != gt["rooms"]:
+            if not agent["rooms"]:
+                details["mismatches"].append(
+                    f"rooms missing (expected '{gt['rooms']}')"
+                )
+                return False, details
+            if agent["rooms"] != gt["rooms"]:
                 details["mismatches"].append(
                     f"rooms: '{agent['rooms']}' vs '{gt['rooms']}'"
                 )
@@ -943,7 +987,12 @@ class ExpediaUrlMatch(BaseMetric):
 
         # 6. Children count
         if gt["children"]:
-            if agent["children"] and agent["children"] != gt["children"]:
+            if not agent["children"]:
+                details["mismatches"].append(
+                    f"children count missing (expected '{gt['children']}')"
+                )
+                return False, details
+            if agent["children"] != gt["children"]:
                 details["mismatches"].append(
                     f"children: '{agent['children']}' vs '{gt['children']}'"
                 )
