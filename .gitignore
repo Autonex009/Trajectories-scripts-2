@@ -66,3 +66,5 @@ uv.lock
 
 # Project specific
 results*/
+
+.env
