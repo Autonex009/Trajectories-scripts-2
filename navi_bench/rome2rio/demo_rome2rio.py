@@ -101,33 +101,43 @@ async def run_scenario(scenario):
         print("\n👉 If Cloudflare appears, solve it once manually.")
         await asyncio.to_thread(
             input,
-            "\nComplete search manually, then press ENTER... "
+            "\nNavigate to the page you want, then press ENTER to begin continuous scraping... "
         )
 
-        # ---------------- SCRAPING ----------------
-
+        # ---------------- CONTINUOUS SCRAPING ----------------
+        print("\n[SYSTEM] Starting continuous monitor. Press Ctrl+C to stop.")
+        
         try:
-            active_page = context.pages[-1]
+            while True:
+                # Dynamically grab the last opened tab
+                active_page = context.pages[-1]
 
-            print(f"\n[SYSTEM] Scraping active tab: {active_page.url}")
+                # Check if we are on a results page OR a detailed schedules page
+                count_results = await active_page.locator('[data-testid^="trip-search-result"]').count()
+                count_schedules = await active_page.locator('[aria-labelledby^="schedule-cell-times-"]').count()
+                
+                # If either element is present on the page, trigger the JS evaluation
+                if count_results > 0 or count_schedules > 0:
+                    await evaluator.update(page=active_page)
+                    result = await evaluator.compute()
 
-            # relaxed wait (React rendering)
-            await active_page.wait_for_timeout(5000)
+                    # Stop if our target scenario is fully covered
+                    if result.score >= 1.0:
+                        print("\n✅ Target queries covered!")
+                        reporter.print_result(result)
+                        break
+                
+                # Wait a few seconds before checking the DOM again
+                await asyncio.sleep(3)
 
-            count = await active_page.locator('[data-testid^="trip-search-result"]').count()
-            print(f"[DEBUG] Found {count} route cards")
-
-            await evaluator.update(page=active_page)
-
+        except KeyboardInterrupt:
+            print("\n[SYSTEM] Continuous scraping stopped manually.")
         except Exception as e:
-            print(f"[ERROR] scraping failed: {e}")
+            print(f"[ERROR] Scraping loop interrupted: {e}")
 
-        result = await evaluator.compute()
-
-        reporter.print_result(result)
-
-        # ❗ DO NOT close context → keeps session (important)
-        # await context.close()
+        # If the loop breaks without hitting 100%, print the final state
+        if 'result' in locals() and result.score < 1.0:
+            reporter.print_result(result)
 
     return result
 

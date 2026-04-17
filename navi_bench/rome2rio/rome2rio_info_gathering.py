@@ -4,7 +4,6 @@ from pathlib import Path
 
 from navi_bench.base import BaseMetric
 
-
 # ---------------- TYPES ----------------
 
 class Query(TypedDict, total=False):
@@ -15,7 +14,8 @@ class Query(TypedDict, total=False):
 
 class Info(TypedDict, total=False):
     mode: str
-    price: float
+    min_price: float  # Updated to match JS output
+    max_price: float  # Updated to match JS output
     duration: int
     pageType: str
 
@@ -35,6 +35,7 @@ class Rome2RioInfoGathering(BaseMetric):
         self.queries = queries
         self._infos = []
         self._covered = [False] * len(queries)
+        self.seen_signatures = set() # Track what we've already scraped
 
     @property
     def js_script(self):
@@ -47,12 +48,26 @@ class Rome2RioInfoGathering(BaseMetric):
             data = await page.evaluate(self.js_script)
 
             if isinstance(data, list):
-                print(f"\n[SCRAPED {len(data)} ROUTES]")
+                new_data = []
+                
+                # Deduplication logic
+                for r in data:
+                    # Create a unique string for each route
+                    sig = f"{r.get('mode')}_{r.get('min_price')}_{r.get('duration')}"
+                    
+                    if sig not in self.seen_signatures:
+                        self.seen_signatures.add(sig)
+                        new_data.append(r)
+                        self._infos.append(r)
 
-                for i, r in enumerate(data[:10], 1):
-                    print(f"{i}. {r.get('mode')} | ₹{r.get('price')} | {r.get('duration')} min")
+                if new_data:
+                    # ---> ADDED URL TO THE PRINT STATEMENT <---
+                    print(f"\n[SCRAPED {len(new_data)} NEW ROUTES] -> {page.url}")
 
-                self._infos.extend(data)
+                    for i, r in enumerate(new_data[:10], 1):
+                        price_display = f"₹{r.get('min_price')}" if r.get('min_price') is not None else "N/A"
+                        duration_display = f"{r.get('duration')} min" if r.get('duration') is not None else "N/A"
+                        print(f"{i}. {r.get('mode')} | {price_display} | {duration_display}")
 
         except Exception as e:
             print(f"[ERROR] scraping failed: {e}")
@@ -78,8 +93,6 @@ class Rome2RioInfoGathering(BaseMetric):
             n_queries=n_queries,
             n_covered=n_covered
         )
-
-        print("[DEBUG] Final result:", result)
 
         return result
 
