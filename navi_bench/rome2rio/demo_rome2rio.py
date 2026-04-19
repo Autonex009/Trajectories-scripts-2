@@ -112,16 +112,17 @@ async def run_scenario(scenario):
                 # Dynamically grab the last opened tab
                 active_page = context.pages[-1]
 
-                # Check if we are on a results page OR a detailed schedules page
+                # Check for all possible card layouts across the site
                 count_results = await active_page.locator('[data-testid^="trip-search-result"]').count()
                 count_schedules = await active_page.locator('[aria-labelledby^="schedule-cell-times-"]').count()
+                count_hotels = await active_page.locator('[data-testid="hotel-list-item"]').count()
+                count_experiences = await active_page.locator('article').count()
                 
-                # If either element is present on the page, trigger the JS evaluation
-                if count_results > 0 or count_schedules > 0:
+                # Trigger evaluation if any are present
+                if count_results > 0 or count_schedules > 0 or count_hotels > 0 or count_experiences > 0:
                     await evaluator.update(page=active_page)
                     result = await evaluator.compute()
 
-                    # Stop if our target scenario is fully covered
                     if result.score >= 1.0:
                         print("\n✅ Target queries covered!")
                         reporter.print_result(result)

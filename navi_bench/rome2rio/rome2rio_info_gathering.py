@@ -14,10 +14,13 @@ class Query(TypedDict, total=False):
 
 class Info(TypedDict, total=False):
     mode: str
-    min_price: float  # Updated to match JS output
-    max_price: float  # Updated to match JS output
+    min_price: float
+    max_price: float
     duration: int
     pageType: str
+    name: str   
+    stars: int  
+    rating: float # Added for Experiences
 
 
 class FinalResult(BaseModel):
@@ -35,7 +38,7 @@ class Rome2RioInfoGathering(BaseMetric):
         self.queries = queries
         self._infos = []
         self._covered = [False] * len(queries)
-        self.seen_signatures = set() # Track what we've already scraped
+        self.seen_signatures = set() 
 
     @property
     def js_script(self):
@@ -52,8 +55,11 @@ class Rome2RioInfoGathering(BaseMetric):
                 
                 # Deduplication logic
                 for r in data:
-                    # Create a unique string for each route
-                    sig = f"{r.get('mode')}_{r.get('min_price')}_{r.get('duration')}"
+                    page_type = r.get("pageType")
+                    if page_type in ["hotels", "experiences"]:
+                        sig = f"{page_type}_{r.get('name')}_{r.get('min_price')}"
+                    else:
+                        sig = f"route_{r.get('mode')}_{r.get('min_price')}_{r.get('duration')}"
                     
                     if sig not in self.seen_signatures:
                         self.seen_signatures.add(sig)
@@ -61,25 +67,29 @@ class Rome2RioInfoGathering(BaseMetric):
                         self._infos.append(r)
 
                 if new_data:
-                    # ---> ADDED URL TO THE PRINT STATEMENT <---
-                    print(f"\n[SCRAPED {len(new_data)} NEW ROUTES] -> {page.url}")
+                    print(f"\n[SCRAPED {len(new_data)} NEW ITEMS] -> {page.url}")
 
                     for i, r in enumerate(new_data[:10], 1):
                         price_display = f"₹{r.get('min_price')}" if r.get('min_price') is not None else "N/A"
                         duration_display = f"{r.get('duration')} min" if r.get('duration') is not None else "N/A"
-                        print(f"{i}. {r.get('mode')} | {price_display} | {duration_display}")
+                        
+                        if r.get("pageType") == "hotels":
+                            stars_display = f"{r.get('stars')}★" if r.get('stars') else "Unrated"
+                            print(f"{i}. [HOTEL] {r.get('name')} ({stars_display}) | {price_display}")
+                        elif r.get("pageType") == "experiences":
+                            rating_display = f"{r.get('rating')}★" if r.get('rating') else "Unrated"
+                            print(f"{i}. [EXPERIENCE] {r.get('name')} ({rating_display}) | {price_display} | {duration_display}")
+                        else:
+                            print(f"{i}. [ROUTE] {r.get('mode')} | {price_display} | {duration_display}")
 
         except Exception as e:
             print(f"[ERROR] scraping failed: {e}")
 
     async def compute(self):
-
         for info in self._infos:
             for i, query_group in enumerate(self.queries):
-
                 if self._covered[i]:
                     continue
-
                 for query in query_group:
                     if self._match(query, info):
                         self._covered[i] = True
@@ -93,19 +103,16 @@ class Rome2RioInfoGathering(BaseMetric):
             n_queries=n_queries,
             n_covered=n_covered
         )
-
         return result
 
     def _match(self, query, info):
-
         if "modes" in query:
             mode = (info.get("mode") or "").lower()
             if not any(m.lower() in mode for m in query["modes"]):
                 return False
 
         if "max_price" in query:
-            price = info.get("min_price")  # use minimum price for matching
-
+            price = info.get("min_price") 
             if price is None or price > query["max_price"]:
                 return False
 
