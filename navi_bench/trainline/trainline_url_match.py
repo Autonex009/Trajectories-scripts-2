@@ -35,33 +35,37 @@ Station URN examples (browser-verified Apr 2026):
 
   London (Any)                → urn:trainline:generic:loc:182gb
   Manchester (Any)            → urn:trainline:generic:loc:115gb
-  London St Pancras Intl      → urn:trainline:generic:loc:STP{nnnn}gb
-  London Kings Cross          → urn:trainline:generic:loc:KGX{nnnn}gb
-  London Euston               → urn:trainline:generic:loc:EUS{nnnn}gb
-  London Paddington           → urn:trainline:generic:loc:PAD{nnnn}gb
-  London Victoria             → urn:trainline:generic:loc:VIC{nnnn}gb
-  London Waterloo             → urn:trainline:generic:loc:WAT{nnnn}gb
-  London Liverpool Street     → urn:trainline:generic:loc:LST{nnnn}gb
-  Manchester Piccadilly       → urn:trainline:generic:loc:MAN{nnnn}gb
-  Edinburgh (Waverley)        → urn:trainline:generic:loc:EDB{nnnn}gb
-  Birmingham New Street       → urn:trainline:generic:loc:BHM{nnnn}gb
-  Leeds                       → urn:trainline:generic:loc:LDS{nnnn}gb
-  Glasgow Central             → urn:trainline:generic:loc:GLC{nnnn}gb
-  York                        → urn:trainline:generic:loc:YRK{nnnn}gb
-  Bristol Temple Meads        → urn:trainline:generic:loc:BRI{nnnn}gb
-  Liverpool Lime Street       → urn:trainline:generic:loc:LIV{nnnn}gb
-  Newcastle                   → urn:trainline:generic:loc:NCL{nnnn}gb
-  Brighton                    → urn:trainline:generic:loc:BTN{nnnn}gb
-  Cambridge                   → urn:trainline:generic:loc:CBG{nnnn}gb
-  Oxford                      → urn:trainline:generic:loc:OXF{nnnn}gb
+  Glasgow (Any)               → urn:trainline:generic:loc:81gb
+  London St Pancras Intl      → urn:trainline:generic:loc:STP1555gb
+  London Kings Cross          → urn:trainline:generic:loc:KGX6121gb
+  London Euston               → urn:trainline:generic:loc:EUS1444gb
+  London Paddington           → urn:trainline:generic:loc:PAD3087gb
+  London Victoria             → urn:trainline:generic:loc:VIC5426gb
+  London Waterloo             → urn:trainline:generic:loc:WAT5598gb
+  London Liverpool Street     → urn:trainline:generic:loc:LST6965gb
+  Manchester Piccadilly       → urn:trainline:generic:loc:MAN2968gb
+  Edinburgh (Waverley)        → urn:trainline:generic:loc:EDB9328gb
+  Birmingham New Street       → urn:trainline:generic:loc:BHM1127gb
+  Leeds                       → urn:trainline:generic:loc:LDS8487gb
+  Glasgow Central             → urn:trainline:generic:loc:GLC9012gb
+  York                        → urn:trainline:generic:loc:YRK8263gb
+  Bristol Temple Meads        → urn:trainline:generic:loc:BRI3231gb
+  Liverpool Lime Street       → urn:trainline:generic:loc:LIV2246gb
+  Newcastle                   → urn:trainline:generic:loc:NCL7728gb
+  Brighton                    → urn:trainline:generic:loc:BTN5268gb
+  Cambridge                   → urn:trainline:generic:loc:CBG7022gb
+  Oxford                      → urn:trainline:generic:loc:OXF3115gb
   Paris (Any)                 → urn:trainline:generic:loc:4916
 
 Note: Travel class (Standard / 1st class) is selected on the results page,
 NOT encoded in the URL. Therefore class verification is out of scope.
 """
 
+import asyncio
+import functools
 import re
-from datetime import date, datetime
+from datetime import date
+from pathlib import Path
 from typing import Any, TypedDict
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -98,6 +102,66 @@ class TrainlineVerifierResult(BaseModel):
     agent_url: str = ""
     gt_url: str = ""
     details: dict = {}
+
+
+class MultiCandidateQuery(TypedDict, total=False):
+    """Query definition for deterministic Trainline info-gathering tasks.
+
+    URLs are validated via CRS-prefix matching on origin/destination.
+    Passenger counts are verified via DOM-scraped summary text.
+    """
+    # URL that the agent should navigate to
+    urls: list[str] | None
+    # Expected station names (DOM-level, not URN)
+    origin_station: str | None
+    destination_station: str | None
+    # Expected passenger summary (scraped from DOM)
+    passenger_summary: str | None
+    # Expected counts
+    adults: int | None
+    children: int | None
+    # Journey type
+    journey_type: str | None  # 'single' or 'return'
+
+
+class InfoDict(TypedDict, total=False):
+    """Info scraped from the Trainline DOM by trainline_info_gathering.js."""
+    url: str
+    source: str
+    pageType: str
+    antiBotStatus: str
+    # Search header
+    originStation: str
+    destinationStation: str
+    passengerSummary: str
+    adults: int
+    children: int
+    outwardDate: str
+    journeyType: str
+    # Journey card
+    price: float | None
+    departTime: str | None
+    arrivalTime: str | None
+    duration: int | None
+    operator: str
+    changes: int | None
+    info: str
+    # URL metadata
+    urlOrigin: str
+    urlDestination: str
+    urlOutwardDate: str
+    urlInwardDate: str
+    urlJourneyType: str
+    urlPassengerCount: int
+
+
+class InfoGatheringResult(BaseModel):
+    """Result from TrainlineInfoGathering.compute()."""
+    score: float
+    n_queries: int
+    n_covered: int
+    queries: list[list[MultiCandidateQuery]]
+    is_query_covered: list[bool]
 
 
 # =============================================================================
@@ -737,6 +801,356 @@ def generate_task_config(
 
     eval_target = get_import_path(TrainlineUrlMatch)
     eval_config = {"_target_": eval_target, "gt_url": rendered_gt_urls}
+    return BaseTaskConfig(
+        url=url,
+        task=rendered_task,
+        user_metadata=user_metadata,
+        eval_config=eval_config,
+    )
+
+
+# =============================================================================
+# INFO GATHERING — DOM-BASED VERIFIER
+# =============================================================================
+
+
+class TrainlineInfoGathering(BaseMetric):
+    """DOM + URL hybrid verifier for Trainline search tasks.
+
+    Unlike TrainlineUrlMatch (pure URL comparison), this verifier:
+    1. Injects trainline_info_gathering.js into the browser page
+    2. Scrapes station names, passenger summary, prices from the DOM
+    3. Compares scraped data against expected queries
+
+    This matches the pattern used by Kayak, VividSeats, Ticketmaster, etc.
+    The seniors' CSV format (with ``queries``, ``passenger_summary_scraped``,
+    ``origin_station``, ``destination_station``) targets this verifier.
+    """
+
+    def __init__(self, queries: list[list[MultiCandidateQuery]]) -> None:
+        super().__init__()
+        self.queries = queries
+        self._all_infos: list[list[InfoDict]] = []
+        self._is_query_covered: list[bool] = [False] * len(queries)
+        self._navigation_stack: list[dict] = []
+        self._tracked_pages: set = set()
+
+    @functools.cached_property
+    def js_script(self) -> str:
+        with open(Path(__file__).parent / "trainline_info_gathering.js", "r") as f:
+            return f.read()
+
+    async def reset(self) -> None:
+        self._all_infos = []
+        self._is_query_covered = [False] * len(self.queries)
+        self._navigation_stack = []
+        self._tracked_pages = set()
+
+    def attach_to_context(self, context) -> None:
+        """Attach page-navigation listeners to automatically scrape new pages."""
+        async def track_page(page) -> None:
+            page_id = id(page)
+            if page_id in self._tracked_pages:
+                return
+            self._tracked_pages.add(page_id)
+
+            async def on_frame_navigated(frame):
+                if frame != page.main_frame:
+                    return
+                if "trainline" not in frame.url:
+                    return
+                try:
+                    logger.info(f"[NAV] Trainline: {frame.url[:80]}...")
+                    await self.update(page=page)
+                except Exception:
+                    pass
+
+            page.on(
+                "framenavigated",
+                lambda f: asyncio.create_task(on_frame_navigated(f)),
+            )
+
+        for page in context.pages:
+            asyncio.create_task(track_page(page))
+        context.on("page", lambda p: asyncio.create_task(track_page(p)))
+
+    async def update(self, **kwargs) -> None:
+        page = kwargs["page"]
+        content = await page.content()
+
+        if any(s in content.lower() for s in [
+            "px-captcha", "challenge-running", "verify you are human",
+        ]):
+            logger.error("Agent blocked by Trainline Anti-Bot.")
+
+        all_frame_infos: list[InfoDict] = []
+        for frame in page.frames:
+            try:
+                frame_infos = await asyncio.wait_for(
+                    frame.evaluate(self.js_script), timeout=3.0
+                )
+                if frame_infos and isinstance(frame_infos, list):
+                    all_frame_infos.extend(frame_infos)
+            except Exception:
+                pass
+
+        # Deduplication
+        unique_infos = []
+        seen = set()
+        for info in all_frame_infos:
+            key = (
+                f"{info.get('source')}-{info.get('departTime')}-"
+                f"{info.get('price')}-{info.get('originStation')}"
+            )
+            if key not in seen:
+                seen.add(key)
+                unique_infos.append(info)
+
+        infos = unique_infos
+
+        if infos:
+            print(f"\n[SCRAPED DATA FROM: {page.url[:60]}...]", flush=True)
+            for i, item in enumerate(infos[:10], 1):
+                price = item.get("price", "N/A")
+                origin = item.get("originStation", "?")
+                dest = item.get("destinationStation", "?")
+                pax = item.get("passengerSummary", "?")
+                depart = item.get("departTime", "XX:XX")
+                arrive = item.get("arrivalTime", "XX:XX")
+                print(
+                    f"  {i}. {origin} → {dest} | {pax} | "
+                    f"{depart}-{arrive} | £{price}",
+                    flush=True,
+                )
+
+        page_type = infos[0].get("pageType", "unknown") if infos else "unknown"
+        anti_bot = infos[0].get("antiBotStatus", "unknown") if infos else "unknown"
+
+        self._all_infos.append(infos)
+
+        base_url = page.url.split("?")[0]
+        page_entry = {
+            "url": page.url,
+            "base_url": base_url,
+            "page_type": page_type,
+            "anti_bot": anti_bot,
+            "infos": infos,
+        }
+
+        existing_idx = next(
+            (
+                i
+                for i, e in enumerate(self._navigation_stack)
+                if e["base_url"] == base_url and e["page_type"] == page_type
+            ),
+            None,
+        )
+        if existing_idx is not None:
+            self._navigation_stack[existing_idx] = page_entry
+        else:
+            self._navigation_stack.append(page_entry)
+
+    async def compute(self) -> InfoGatheringResult:
+        for page_visit in reversed(self._navigation_stack):
+            if page_visit["anti_bot"] != "clear":
+                continue
+            if page_visit["page_type"] in ["train_results"]:
+                for i, alternative_conditions in enumerate(self.queries):
+                    if self._is_query_covered[i]:
+                        continue
+                    for info in page_visit["infos"]:
+                        if self._check_alternative_conditions(
+                            i, alternative_conditions, info
+                        ):
+                            self._is_query_covered[i] = True
+                            break
+
+        n_queries = len(self.queries)
+        n_covered = sum(self._is_query_covered)
+        return InfoGatheringResult(
+            score=n_covered / max(n_queries, 1),
+            n_queries=n_queries,
+            n_covered=n_covered,
+            queries=self.queries,
+            is_query_covered=self._is_query_covered,
+        )
+
+    def _check_alternative_conditions(
+        self,
+        i: int,
+        alternative_conditions: list[MultiCandidateQuery],
+        info: InfoDict,
+    ) -> bool:
+        for cond in alternative_conditions:
+            if self._check_query(cond, info):
+                return True
+        return False
+
+    @classmethod
+    def _check_query(cls, query: MultiCandidateQuery, info: InfoDict) -> bool:
+        """Check if a single DOM-scraped info dict satisfies one query."""
+
+        # 1. Origin station name (DOM text, fuzzy substring)
+        if q_origin := query.get("origin_station"):
+            info_origin = (info.get("originStation") or "").lower()
+            if q_origin.lower() not in info_origin:
+                return False
+
+        # 2. Destination station name (DOM text, fuzzy substring)
+        if q_dest := query.get("destination_station"):
+            info_dest = (info.get("destinationStation") or "").lower()
+            if q_dest.lower() not in info_dest:
+                return False
+
+        # 3. Passenger summary (DOM text match)
+        if q_pax := query.get("passenger_summary"):
+            info_pax = (info.get("passengerSummary") or "").lower()
+            # Parse both into counts for robust comparison
+            q_adults, q_children = _parse_passenger_summary(q_pax)
+            i_adults = info.get("adults", 0)
+            i_children = info.get("children", 0)
+            if q_adults != i_adults or q_children != i_children:
+                return False
+
+        # 4. Explicit adult count
+        if "adults" in query and query["adults"] is not None:
+            if info.get("adults", 0) != query["adults"]:
+                return False
+
+        # 5. Explicit child count
+        if "children" in query and query["children"] is not None:
+            if info.get("children", 0) != query["children"]:
+                return False
+
+        # 6. Journey type
+        if q_jtype := query.get("journey_type"):
+            info_jtype = (info.get("journeyType") or "").lower()
+            if q_jtype.lower() != info_jtype:
+                return False
+
+        # 7. URL-based station check via CRS prefix (fallback)
+        if q_urls := query.get("urls"):
+            # Check if the URL in the info matches any expected URL
+            # The JS scraper returns full URNs, normalize them first
+            info_url_origin = _normalize_station_urn(
+                info.get("urlOrigin", "")
+            )
+            info_url_dest = _normalize_station_urn(
+                info.get("urlDestination", "")
+            )
+            if info_url_origin or info_url_dest:
+                matched_any_url = False
+                for expected_url in q_urls:
+                    parsed = parse_trainline_url(expected_url)
+                    gt_origin = parsed.get("origin", "")
+                    gt_dest = parsed.get("destination", "")
+                    if gt_origin and info_url_origin:
+                        if not _stations_match(info_url_origin, gt_origin):
+                            continue
+                    if gt_dest and info_url_dest:
+                        if not _stations_match(info_url_dest, gt_dest):
+                            continue
+                    matched_any_url = True
+                    break
+                if not matched_any_url:
+                    return False
+
+        return True
+
+
+def _parse_passenger_summary(text: str) -> tuple[int, int]:
+    """Parse a passenger summary string like '2 adults, 1 child' into (adults, children)."""
+    text = text.lower().strip()
+    adults = 0
+    children = 0
+
+    adult_match = re.search(r"(\d+)\s*adult", text)
+    if adult_match:
+        adults = int(adult_match.group(1))
+
+    child_match = re.search(r"(\d+)\s*child(?:ren)?", text)
+    if child_match:
+        children = int(child_match.group(1))
+
+    # Default: if nothing parsed, assume 1 adult
+    if adults == 0 and children == 0:
+        adults = 1
+
+    return adults, children
+
+
+# =============================================================================
+# DETERMINISTIC TASK CONFIG GENERATION
+# =============================================================================
+
+
+def generate_task_config_deterministic(
+    task: str,
+    queries: list[list[str]],
+    location: str,
+    timezone: str,
+    passenger_summary_scraped: str = "1 adult",
+    origin_station: str = "",
+    destination_station: str = "",
+    timestamp: int | None = None,
+    url: str = "https://www.thetrainline.com/",
+    values: dict[str, str] | None = None,
+) -> BaseTaskConfig:
+    """Generate task configuration for deterministic Trainline info-gathering.
+
+    This is the new-format config generator that matches the seniors' CSV
+    structure. It uses ``queries`` (list of URL alternatives) instead of
+    ``gt_url``, and supports DOM-level fields like ``passenger_summary_scraped``.
+
+    Args:
+        task: Natural language task description with ``{placeholder}`` tokens.
+        queries: Nested list of GT URLs: ``[["url1"], ["url2"]]``.
+                 Each inner list is a set of alternative URLs for one query.
+        location: User location (e.g. "United Kingdom").
+        timezone: IANA timezone (e.g. "Europe/London").
+        passenger_summary_scraped: Expected passenger text from DOM
+            (e.g. "2 adults, 1 child").
+        origin_station: Expected origin station name from DOM.
+        destination_station: Expected destination station name from DOM.
+        timestamp: Unix timestamp. ``None`` means "now".
+        url: Starting URL for the agent.
+        values: Placeholder-key → relative-date expression mapping.
+    """
+    values = values or {}
+    user_metadata = initialize_user_metadata(timezone, location, timestamp)
+    resolved_placeholders, _ = initialize_placeholder_map(user_metadata, values)
+
+    # Render {placeholder} tokens in task text
+    rendered_task = render_task_statement(task, resolved_placeholders)
+
+    # Resolve dates in query URLs
+    rendered_queries: list[list[MultiCandidateQuery]] = []
+    adults, children = _parse_passenger_summary(passenger_summary_scraped)
+
+    for url_alternatives in queries:
+        resolved_urls = []
+        for u in url_alternatives:
+            rendered_u = u
+            for placeholder_key, (_, dates) in resolved_placeholders.items():
+                template = "{" + placeholder_key + "}"
+                if template in rendered_u and dates:
+                    rendered_u = rendered_u.replace(template, dates[0])
+            resolved_urls.append(rendered_u)
+
+        query_condition: MultiCandidateQuery = {
+            "urls": resolved_urls,
+            "origin_station": origin_station,
+            "destination_station": destination_station,
+            "passenger_summary": passenger_summary_scraped,
+            "adults": adults,
+            "children": children,
+        }
+        rendered_queries.append([query_condition])
+
+    eval_config = {
+        "_target_": get_import_path(TrainlineInfoGathering),
+        "queries": rendered_queries,
+    }
     return BaseTaskConfig(
         url=url,
         task=rendered_task,
