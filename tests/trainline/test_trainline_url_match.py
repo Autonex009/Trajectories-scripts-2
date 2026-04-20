@@ -934,3 +934,111 @@ class TestDeterministicTaskConfig:
         query = config.eval_config["queries"][0][0]
         assert query["adults"] == 2
         assert query["children"] == 1
+
+
+# =============================================================================
+# REGRESSION TESTS — Bug fixes (Apr 2026)
+# =============================================================================
+
+
+class TestBug2DateVerification:
+    """BUG 2: _check_query must verify outward/inward dates from URL metadata."""
+
+    def test_correct_date_passes(self):
+        query = {
+            "urls": [
+                "https://www.thetrainline.com/book/results?"
+                "journeySearchType=single"
+                "&origin=urn:trainline:generic:loc:EUS1444gb"
+                "&destination=urn:trainline:generic:loc:MAN2968gb"
+                "&outwardDate=2026-06-15T12:00:00"
+                "&outwardDateType=departAfter"
+            ],
+        }
+        info = {
+            "urlOrigin": "urn:trainline:generic:loc:EUS1444gb",
+            "urlDestination": "urn:trainline:generic:loc:MAN2968gb",
+            "urlOutwardDate": "2026-06-15T09:00:00",
+            "urlInwardDate": "",
+        }
+        result = TrainlineInfoGathering._check_query(query, info)
+        assert result is True
+
+    def test_wrong_date_fails(self):
+        query = {
+            "urls": [
+                "https://www.thetrainline.com/book/results?"
+                "journeySearchType=single"
+                "&origin=urn:trainline:generic:loc:EUS1444gb"
+                "&destination=urn:trainline:generic:loc:MAN2968gb"
+                "&outwardDate=2026-06-15T12:00:00"
+                "&outwardDateType=departAfter"
+            ],
+        }
+        info = {
+            "urlOrigin": "urn:trainline:generic:loc:EUS1444gb",
+            "urlDestination": "urn:trainline:generic:loc:MAN2968gb",
+            "urlOutwardDate": "2026-07-20T09:00:00",  # Wrong date
+            "urlInwardDate": "",
+        }
+        result = TrainlineInfoGathering._check_query(query, info)
+        assert result is False
+
+    def test_wrong_return_date_fails(self):
+        query = {
+            "urls": [
+                "https://www.thetrainline.com/book/results?"
+                "journeySearchType=return"
+                "&origin=urn:trainline:generic:loc:EUS1444gb"
+                "&destination=urn:trainline:generic:loc:MAN2968gb"
+                "&outwardDate=2026-06-15T12:00:00"
+                "&outwardDateType=departAfter"
+                "&inwardDate=2026-06-18T12:00:00"
+                "&inwardDateType=departAfter"
+            ],
+        }
+        info = {
+            "urlOrigin": "urn:trainline:generic:loc:EUS1444gb",
+            "urlDestination": "urn:trainline:generic:loc:MAN2968gb",
+            "urlOutwardDate": "2026-06-15T09:00:00",
+            "urlInwardDate": "2026-06-25T14:00:00",  # Wrong return date
+        }
+        result = TrainlineInfoGathering._check_query(query, info)
+        assert result is False
+
+
+class TestBug3StrictJourneyType:
+    """BUG 3: _urls_match must fail when GT specifies journey type but agent omits it."""
+
+    def _make_url(self, journey_type=None):
+        base = (
+            "https://www.thetrainline.com/book/results?"
+            "origin=urn:trainline:generic:loc:EUS1444gb"
+            "&destination=urn:trainline:generic:loc:MAN2968gb"
+            "&outwardDate=2026-06-15T12:00:00"
+            "&outwardDateType=departAfter"
+        )
+        if journey_type:
+            base = base + f"&journeySearchType={journey_type}"
+        return base
+
+    def test_matching_journey_type_passes(self):
+        gt = self._make_url("single")
+        agent = self._make_url("single")
+        match, details = _match(agent, gt)
+        assert match is True
+
+    def test_missing_agent_journey_type_fails(self):
+        gt = self._make_url("single")
+        agent = self._make_url(None)  # No journeySearchType
+        match, details = _match(agent, gt)
+        assert match is False
+        assert any("missing" in m.lower() for m in details.get("mismatches", []))
+
+    def test_wrong_journey_type_fails(self):
+        gt = self._make_url("single")
+        agent = self._make_url("return")
+        match, details = _match(agent, gt)
+        assert match is False
+
+
