@@ -144,8 +144,8 @@ UK stations use the National Rail **CRS code** as a prefix:
 | :--- | :---: | :--- |
 | London Euston | EUS | `urn:trainline:generic:loc:EUS1444gb` |
 | London St Pancras International | STP | `urn:trainline:generic:loc:STP1555gb` |
-| London Kings Cross | KGX | `urn:trainline:generic:loc:KGX4832gb`, `KGX6121gb` |
-| London Paddington | PAD | `urn:trainline:generic:loc:PAD2935gb` |
+| London Kings Cross | KGX | `urn:trainline:generic:loc:KGX6121gb` (was `KGX4832gb`) |
+| London Paddington | PAD | `urn:trainline:generic:loc:PAD3087gb` (was `PAD2935gb`) |
 | London Victoria | VIC | `urn:trainline:generic:loc:VIC5426gb` |
 | London Waterloo | WAT | `urn:trainline:generic:loc:WAT5598gb` |
 | London Liverpool Street | LST | `urn:trainline:generic:loc:LST6965gb` |
@@ -153,7 +153,7 @@ UK stations use the National Rail **CRS code** as a prefix:
 | Edinburgh (Waverley) | EDB | `urn:trainline:generic:loc:EDB9328gb` |
 | Birmingham New Street | BHM | `urn:trainline:generic:loc:BHM1127gb` |
 | Leeds | LDS | `urn:trainline:generic:loc:LDS8487gb` |
-| Glasgow Central | GLC | `urn:trainline:generic:loc:GLC9813gb` |
+| Glasgow Central | GLC | `urn:trainline:generic:loc:GLC9012gb` (was `GLC9813gb`) |
 | York | YRK | `urn:trainline:generic:loc:YRK8263gb` |
 | Bristol Temple Meads | BRI | `urn:trainline:generic:loc:BRI3231gb` |
 | Liverpool Lime Street | LIV | `urn:trainline:generic:loc:LIV2246gb` |
@@ -177,6 +177,7 @@ UK stations use the National Rail **CRS code** as a prefix:
 | :--- | :--- | :---: |
 | London (Any) | `urn:trainline:generic:loc:182gb` | ✅ |
 | Manchester (Any) | `urn:trainline:generic:loc:115gb` | ✅ |
+| Glasgow (Any) | `urn:trainline:generic:loc:81gb` | ✅ |
 | Paris (Any) | `urn:trainline:generic:loc:4916` | ✅ |
 
 > [!NOTE]

@@ -20,6 +20,7 @@ Categories:
 import pytest
 
 from navi_bench.trainline.trainline_url_match import (
+    TrainlineInfoGathering,
     TrainlineUrlMatch,
     TrainlineVerifierResult,
     parse_trainline_url,
@@ -30,6 +31,8 @@ from navi_bench.trainline.trainline_url_match import (
     _normalize_journey_type,
     _dob_to_age,
     _classify_passengers,
+    _parse_passenger_summary,
+    generate_task_config_deterministic,
 )
 
 
@@ -41,14 +44,14 @@ SEARCH_BASE = "https://www.thetrainline.com/book/results"
 
 # Common station URNs (browser-verified Apr 2026)
 LONDON_STP = "urn:trainline:generic:loc:STP1555gb"
-LONDON_KGX = "urn:trainline:generic:loc:KGX4832gb"
+LONDON_KGX = "urn:trainline:generic:loc:KGX6121gb"
 LONDON_EUS = "urn:trainline:generic:loc:EUS1444gb"
-LONDON_PAD = "urn:trainline:generic:loc:PAD2935gb"
+LONDON_PAD = "urn:trainline:generic:loc:PAD3087gb"
 MANCHESTER = "urn:trainline:generic:loc:MAN2968gb"
 EDINBURGH = "urn:trainline:generic:loc:EDB9328gb"
 BIRMINGHAM = "urn:trainline:generic:loc:BHM1127gb"
 LEEDS = "urn:trainline:generic:loc:LDS8487gb"
-GLASGOW = "urn:trainline:generic:loc:GLC9813gb"
+GLASGOW = "urn:trainline:generic:loc:GLC9012gb"
 YORK = "urn:trainline:generic:loc:YRK8263gb"
 PARIS = "urn:trainline:generic:loc:4916"
 
@@ -741,3 +744,193 @@ class TestEdgeCases:
         agent = "https://www.thetrainline.com/train-times/london-to-manchester"
         match, _ = _match(agent, gt)
         assert match is False
+
+
+# =============================================================================
+# 12. Passenger Summary Parsing
+# =============================================================================
+
+
+class TestPassengerSummaryParsing:
+    """Tests for _parse_passenger_summary()."""
+
+    def test_1_adult(self):
+        assert _parse_passenger_summary("1 adult") == (1, 0)
+
+    def test_2_adults(self):
+        assert _parse_passenger_summary("2 adults") == (2, 0)
+
+    def test_1_adult_1_child(self):
+        assert _parse_passenger_summary("1 adult, 1 child") == (1, 1)
+
+    def test_2_adults_2_children(self):
+        assert _parse_passenger_summary("2 adults, 2 children") == (2, 2)
+
+    def test_3_adults(self):
+        assert _parse_passenger_summary("3 adults") == (3, 0)
+
+    def test_case_insensitive(self):
+        assert _parse_passenger_summary("2 Adults, 1 Child") == (2, 1)
+
+    def test_empty_defaults_to_1_adult(self):
+        assert _parse_passenger_summary("") == (1, 0)
+
+    def test_children_only(self):
+        """Edge case: children only still parses correctly."""
+        assert _parse_passenger_summary("2 children") == (0, 2)
+
+
+# =============================================================================
+# 13. TrainlineInfoGathering Query Matching
+# =============================================================================
+
+
+class TestInfoGatheringQueryMatch:
+    """Tests for TrainlineInfoGathering._check_query()."""
+
+    def _make_info(self, **overrides):
+        """Build a mock InfoDict."""
+        base = {
+            "source": "dom_search_header",
+            "pageType": "train_results",
+            "antiBotStatus": "clear",
+            "originStation": "London Euston",
+            "destinationStation": "Manchester Piccadilly",
+            "passengerSummary": "1 adult",
+            "adults": 1,
+            "children": 0,
+            "journeyType": "single",
+            "urlOrigin": "urn:trainline:generic:loc:EUS1444gb",
+            "urlDestination": "urn:trainline:generic:loc:MAN2968gb",
+        }
+        base.update(overrides)
+        return base
+
+    def test_match_origin_station(self):
+        query = {"origin_station": "London Euston"}
+        assert TrainlineInfoGathering._check_query(query, self._make_info()) is True
+
+    def test_mismatch_origin_station(self):
+        query = {"origin_station": "London Paddington"}
+        assert TrainlineInfoGathering._check_query(query, self._make_info()) is False
+
+    def test_match_destination_station(self):
+        query = {"destination_station": "Manchester Piccadilly"}
+        assert TrainlineInfoGathering._check_query(query, self._make_info()) is True
+
+    def test_mismatch_destination_station(self):
+        query = {"destination_station": "Edinburgh"}
+        assert TrainlineInfoGathering._check_query(query, self._make_info()) is False
+
+    def test_match_passenger_summary(self):
+        query = {"passenger_summary": "1 adult"}
+        assert TrainlineInfoGathering._check_query(query, self._make_info()) is True
+
+    def test_mismatch_passenger_summary(self):
+        query = {"passenger_summary": "2 adults"}
+        assert TrainlineInfoGathering._check_query(query, self._make_info()) is False
+
+    def test_match_adults_children(self):
+        query = {"passenger_summary": "2 adults, 1 child"}
+        info = self._make_info(
+            passengerSummary="2 adults, 1 child", adults=2, children=1
+        )
+        assert TrainlineInfoGathering._check_query(query, info) is True
+
+    def test_match_journey_type(self):
+        query = {"journey_type": "single"}
+        assert TrainlineInfoGathering._check_query(query, self._make_info()) is True
+
+    def test_mismatch_journey_type(self):
+        query = {"journey_type": "return"}
+        assert TrainlineInfoGathering._check_query(query, self._make_info()) is False
+
+    def test_empty_query_matches_all(self):
+        """A query with no constraints should match any info."""
+        query = {}
+        assert TrainlineInfoGathering._check_query(query, self._make_info()) is True
+
+    def test_url_crs_matching(self):
+        """URL-level CRS prefix matching via 'urls' field."""
+        query = {
+            "urls": [
+                "https://www.thetrainline.com/book/results"
+                "?journeySearchType=single"
+                "&origin=urn:trainline:generic:loc:EUS1444gb"
+                "&destination=urn:trainline:generic:loc:MAN2968gb"
+                "&outwardDate=2026-05-01T12:00:00"
+            ]
+        }
+        assert TrainlineInfoGathering._check_query(query, self._make_info()) is True
+
+    def test_url_crs_mismatch(self):
+        """URL-level CRS prefix does NOT match."""
+        query = {
+            "urls": [
+                "https://www.thetrainline.com/book/results"
+                "?journeySearchType=single"
+                "&origin=urn:trainline:generic:loc:PAD3087gb"
+                "&destination=urn:trainline:generic:loc:MAN2968gb"
+            ]
+        }
+        assert TrainlineInfoGathering._check_query(query, self._make_info()) is False
+
+    def test_substring_station_match(self):
+        """Partial station name should match (e.g., 'Euston' in 'London Euston')."""
+        query = {"origin_station": "Euston"}
+        assert TrainlineInfoGathering._check_query(query, self._make_info()) is True
+
+
+# =============================================================================
+# 14. generate_task_config_deterministic
+# =============================================================================
+
+
+class TestDeterministicTaskConfig:
+    """Tests for generate_task_config_deterministic()."""
+
+    def test_basic_generation(self):
+        config = generate_task_config_deterministic(
+            task="Find trains from London Euston to Manchester",
+            queries=[
+                [
+                    "https://www.thetrainline.com/book/results"
+                    "?journeySearchType=single"
+                    "&origin=urn:trainline:generic:loc:EUS1444gb"
+                    "&destination=urn:trainline:generic:loc:MAN2968gb"
+                    "&outwardDate=2026-05-01T12:00:00"
+                ]
+            ],
+            location="United Kingdom",
+            timezone="Europe/London",
+            passenger_summary_scraped="1 adult",
+            origin_station="London Euston",
+            destination_station="Manchester Piccadilly",
+        )
+        assert config.task is not None
+        assert "TrainlineInfoGathering" in config.eval_config["_target_"]
+        assert len(config.eval_config["queries"]) == 1
+
+    def test_multi_adult_passenger(self):
+        config = generate_task_config_deterministic(
+            task="Train for 3 adults",
+            queries=[["https://www.thetrainline.com/book/results?origin=x"]],
+            location="United Kingdom",
+            timezone="Europe/London",
+            passenger_summary_scraped="3 adults",
+        )
+        query = config.eval_config["queries"][0][0]
+        assert query["adults"] == 3
+        assert query["children"] == 0
+
+    def test_family_passenger(self):
+        config = generate_task_config_deterministic(
+            task="Train for family",
+            queries=[["https://www.thetrainline.com/book/results?origin=x"]],
+            location="United Kingdom",
+            timezone="Europe/London",
+            passenger_summary_scraped="2 adults, 1 child",
+        )
+        query = config.eval_config["queries"][0][0]
+        assert query["adults"] == 2
+        assert query["children"] == 1
