@@ -704,9 +704,14 @@ class TrainlineUrlMatch(BaseMetric):
                     )
                     return False, details
 
-            # 5. Journey type
+            # 5. Journey type — strict: fail if GT specifies but agent omits
             if gt["journey_type"]:
-                if agent["journey_type"] and agent["journey_type"] != gt["journey_type"]:
+                if not agent["journey_type"]:
+                    details["mismatches"].append(
+                        f"Journey type: agent missing, expected '{gt['journey_type']}'"
+                    )
+                    return False, details
+                if agent["journey_type"] != gt["journey_type"]:
                     details["mismatches"].append(
                         f"Journey type: '{agent['journey_type']}' vs '{gt['journey_type']}'"
                     )
@@ -725,14 +730,6 @@ class TrainlineUrlMatch(BaseMetric):
                 if agent["children"] != gt["children"]:
                     details["mismatches"].append(
                         f"Children: {agent['children']} vs {gt['children']}"
-                    )
-                    return False, details
-
-            # 8. Total passengers (if GT has no DOBs but has count)
-            if gt["total_passengers"] > 0 and gt["adults"] == 0 and gt["children"] == 0:
-                if agent["total_passengers"] != gt["total_passengers"]:
-                    details["mismatches"].append(
-                        f"Total passengers: {agent['total_passengers']} vs {gt['total_passengers']}"
                     )
                     return False, details
 
@@ -894,13 +891,15 @@ class TrainlineInfoGathering(BaseMetric):
             except Exception:
                 pass
 
-        # Deduplication
+        # Deduplication (includes operator to avoid dropping different-operator
+        # tickets that share the same departure time and price)
         unique_infos = []
         seen = set()
         for info in all_frame_infos:
             key = (
                 f"{info.get('source')}-{info.get('departTime')}-"
-                f"{info.get('price')}-{info.get('originStation')}"
+                f"{info.get('price')}-{info.get('originStation')}-"
+                f"{info.get('operator', '')}"
             )
             if key not in seen:
                 seen.add(key)
@@ -1028,9 +1027,8 @@ class TrainlineInfoGathering(BaseMetric):
             if q_jtype.lower() != info_jtype:
                 return False
 
-        # 7. URL-based station check via CRS prefix (fallback)
+        # 7. URL-based station + date check via CRS prefix (fallback)
         if q_urls := query.get("urls"):
-            # Check if the URL in the info matches any expected URL
             # The JS scraper returns full URNs, normalize them first
             info_url_origin = _normalize_station_urn(
                 info.get("urlOrigin", "")
@@ -1038,17 +1036,30 @@ class TrainlineInfoGathering(BaseMetric):
             info_url_dest = _normalize_station_urn(
                 info.get("urlDestination", "")
             )
+            info_outward_date = (info.get("urlOutwardDate") or "").split("T")[0]
+            info_inward_date = (info.get("urlInwardDate") or "").split("T")[0]
+
             if info_url_origin or info_url_dest:
                 matched_any_url = False
                 for expected_url in q_urls:
                     parsed = parse_trainline_url(expected_url)
                     gt_origin = parsed.get("origin", "")
                     gt_dest = parsed.get("destination", "")
+                    gt_outward = parsed.get("outward_date", "")
+                    gt_inward = parsed.get("inward_date", "")
+                    # Station CRS match
                     if gt_origin and info_url_origin:
                         if not _stations_match(info_url_origin, gt_origin):
                             continue
                     if gt_dest and info_url_dest:
                         if not _stations_match(info_url_dest, gt_dest):
+                            continue
+                    # Date match (date portion only, ignore time)
+                    if gt_outward and info_outward_date:
+                        if info_outward_date != gt_outward:
+                            continue
+                    if gt_inward and info_inward_date:
+                        if info_inward_date != gt_inward:
                             continue
                     matched_any_url = True
                     break
