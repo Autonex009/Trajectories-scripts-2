@@ -66,7 +66,8 @@ import functools
 import re
 from datetime import date
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
+from typing_extensions import TypedDict
 from urllib.parse import parse_qs, unquote, urlparse
 
 from beartype import beartype
