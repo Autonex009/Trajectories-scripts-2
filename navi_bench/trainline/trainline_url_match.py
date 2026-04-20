@@ -718,21 +718,21 @@ class TrainlineUrlMatch(BaseMetric):
                     )
                     return False, details
 
-            # 6. Adults count
-            if gt["adults"] > 0:
-                if agent["adults"] != gt["adults"]:
-                    details["mismatches"].append(
-                        f"Adults: {agent['adults']} vs {gt['adults']}"
-                    )
-                    return False, details
+            # 6. Adults count — always verify (no > 0 guard; default 1
+            #    must still match to prevent extra-passenger loopholes)
+            if agent["adults"] != gt["adults"]:
+                details["mismatches"].append(
+                    f"Adults: {agent['adults']} vs {gt['adults']}"
+                )
+                return False, details
 
-            # 7. Children count
-            if gt["children"] > 0:
-                if agent["children"] != gt["children"]:
-                    details["mismatches"].append(
-                        f"Children: {agent['children']} vs {gt['children']}"
-                    )
-                    return False, details
+            # 7. Children count — always verify (closing the loophole
+            #    where gt children=0 was skipped, letting extra children pass)
+            if agent["children"] != gt["children"]:
+                details["mismatches"].append(
+                    f"Children: {agent['children']} vs {gt['children']}"
+                )
+                return False, details
 
             return True, details
 
@@ -1004,8 +1004,7 @@ class TrainlineInfoGathering(BaseMetric):
 
         # 3. Passenger summary (DOM text match)
         if q_pax := query.get("passenger_summary"):
-            info_pax = (info.get("passengerSummary") or "").lower()
-            # Parse both into counts for robust comparison
+            # Parse query summary into counts, compare against JS-scraped counts
             q_adults, q_children = _parse_passenger_summary(q_pax)
             i_adults = info.get("adults", 0)
             i_children = info.get("children", 0)
