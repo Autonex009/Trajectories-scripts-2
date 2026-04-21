@@ -202,7 +202,13 @@ Today is: {dt.strftime("%A")}"""
             "pageup": "PageUp", "pagedown": "PageDown",
             "space": "Space",
         }
-        return _KEY_MAP.get(k.lower(), k)
+        k_lower = k.lower()
+        if k_lower in _KEY_MAP:
+            return _KEY_MAP[k_lower]
+        # Function keys: f1-f12 must be uppercase for Playwright
+        if k_lower.startswith("f") and k_lower[1:].isdigit():
+            return k_lower[0].upper() + k_lower[1:]
+        return k
 
     async def _execute(tool_calls: list[ChatCompletionMessageFunctionToolCall]) -> None:
         for tool_call in tool_calls:
