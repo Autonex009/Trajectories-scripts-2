@@ -9,7 +9,15 @@ from navi_bench.base import BaseMetric
 class Query(TypedDict, total=False):
     modes: List[str]
     max_price: float
+    min_price: float
     max_duration: int
+    min_duration: int
+    min_stars: int
+    min_score: float
+    min_rating: float
+    origins: List[str]
+    destinations: List[str]
+    cities: List[str]
 
 
 class Info(TypedDict, total=False):
@@ -18,9 +26,10 @@ class Info(TypedDict, total=False):
     max_price: float
     duration: int
     pageType: str
-    name: str   
-    stars: int  
-    rating: float # Added for Experiences
+    name: str
+    stars: int
+    score: float
+    rating: float
 
 
 class FinalResult(BaseModel):
@@ -107,18 +116,51 @@ class Rome2RioInfoGathering(BaseMetric):
 
     def _match(self, query, info):
         if "modes" in query:
-            mode = (info.get("mode") or "").lower()
-            if not any(m.lower() in mode for m in query["modes"]):
-                return False
+            page_type = info.get("pageType", "")
+            if page_type in ("hotels", "experiences"):
+                # Hotels and experiences: match modes against the name field
+                # because JS emits static mode strings ("Hotel", "Experience")
+                name = (info.get("name") or "").lower()
+                if not any(m.lower() in name for m in query["modes"]):
+                    return False
+            else:
+                mode = (info.get("mode") or "").lower()
+                if not any(m.lower() in mode for m in query["modes"]):
+                    return False
 
         if "max_price" in query:
-            price = info.get("min_price") 
+            price = info.get("min_price")
             if price is None or price > query["max_price"]:
+                return False
+
+        if "min_price" in query:
+            price = info.get("min_price")
+            if price is None or price < query["min_price"]:
                 return False
 
         if "max_duration" in query:
             duration = info.get("duration")
             if duration is None or duration > query["max_duration"]:
+                return False
+
+        if "min_duration" in query:
+            duration = info.get("duration")
+            if duration is None or duration < query["min_duration"]:
+                return False
+
+        if "min_stars" in query:
+            stars = info.get("stars")
+            if stars is None or stars < query["min_stars"]:
+                return False
+
+        if "min_score" in query:
+            score = info.get("score")
+            if score is None or score < query["min_score"]:
+                return False
+
+        if "min_rating" in query:
+            rating = info.get("rating")
+            if rating is None or rating < query["min_rating"]:
                 return False
 
         return True

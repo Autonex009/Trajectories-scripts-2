@@ -125,7 +125,25 @@
          }
       }
 
-      results.push({ mode: "Hotel", name, stars, min_price, max_price, pageType: "hotels" });
+      let score = null;
+      const scoreEl = card.querySelector('[data-testid="hotel-review-score"], [class*="reviewScore"], [class*="review-score"]');
+      if (scoreEl) {
+         const scoreVal = parseFloat(scoreEl.textContent.trim());
+         if (!isNaN(scoreVal) && scoreVal >= 1 && scoreVal <= 10) score = scoreVal;
+      }
+      if (score === null) {
+         const allTexts = Array.from(card.querySelectorAll('span, div'));
+         for (const el of allTexts) {
+            const t = el.textContent.trim();
+            const m = t.match(/^(\d+(?:\.\d)?)\s*(?:\/\s*10)?$/);
+            if (m) {
+               const v = parseFloat(m[1]);
+               if (v >= 5 && v <= 10 && el.children.length === 0) { score = v; break; }
+            }
+         }
+      }
+
+      results.push({ mode: "Hotel", name, stars, score, min_price, max_price, pageType: "hotels" });
     } catch (e) {
       console.error("Error parsing hotel card:", e);
     }
@@ -141,7 +159,7 @@
       if (!nameEl) return; // Skip if not an experience card
       let name = nameEl.textContent.trim();
 
-      // Convert "8 hours" or "1 day" text to duration in minutes
+      // Convert "8 hours", "1 day", or "90 minutes" text to duration in minutes
       let duration = null;
       const durationEl = card.querySelector('.text-sm.text-text-secondary');
       if (durationEl) {
@@ -151,6 +169,8 @@
          if (hMatch) mins += parseInt(hMatch[1], 10) * 60;
          const dMatch = text.match(/(\d+)\s*day/i);
          if (dMatch) mins += parseInt(dMatch[1], 10) * 1440;
+         const mMatch = text.match(/(\d+)\s*min/i);
+         if (mMatch) mins += parseInt(mMatch[1], 10);
          if (mins > 0) duration = mins;
       }
 
