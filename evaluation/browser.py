@@ -67,15 +67,18 @@ async def build_browser(
             "apartments.com" in task_config.url or "opentable.com" in task_config.url or "resy.com" in task_config.url
         )
 
-        use_local_browser = "apartments.com" not in task_config.url and "resy.com" not in task_config.url
-        if not use_local_browser and not os.getenv("BROWSER_CDP_URL"):
+        cdp_url = os.getenv("BROWSER_CDP_URL")
+        # Use CDP (e.g. BrightData) for any site when BROWSER_CDP_URL is set.
+        # The old logic only routed apartments.com/resy.com to CDP, leaving
+        # Trainline and other bot-protected sites on a plain local browser.
+        use_local_browser = not cdp_url
+        if not cdp_url and ("apartments.com" in task_config.url or "resy.com" in task_config.url):
             logger.warning(
                 f"BROWSER_CDP_URL is not set. Falling back to local browser for: {task_config.url}. "
                 "However, this may be blocked by certain websites, leading to crashes. "
                 "After the current run, you may try running the eval script again with `--eval_concurrency 2` "
                 "to redo the crashed tasks."
             )
-            use_local_browser = True
 
         if use_local_browser:
             context_kwargs = {
@@ -89,7 +92,7 @@ async def build_browser(
             browser = await playwright.webkit.launch(headless=config.browser_headless)
             context = await browser.new_context(**context_kwargs)
         else:
-            browser = await playwright.chromium.connect_over_cdp(os.getenv("BROWSER_CDP_URL"))
+            browser = await playwright.chromium.connect_over_cdp(cdp_url)
             if browser.contexts:
                 context = browser.contexts[0]
             else:

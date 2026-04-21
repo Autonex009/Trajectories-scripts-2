@@ -32,6 +32,7 @@ If you want to run from scratch, you can delete the directory or specify a diffe
 import asyncio
 import base64
 import copy
+import csv
 import functools
 import io
 import json
@@ -41,6 +42,7 @@ import time
 import traceback
 from datetime import datetime
 from os import path as osp
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from PIL import Image
@@ -72,9 +74,11 @@ RETRYABLE_API_ERRORS = (APIConnectionError, APITimeoutError, RateLimitError, Int
 
 
 class Config(BaseModel):
-    # Yutori n1 model API config
+    # Yutori model API config — pass "n1.5-latest" for n1.5
     model_name: str = "n1-experimental"
-    # Yutori Navi-Bench dataset config
+    # Local CSV path — if set, loads tasks from this file instead of HuggingFace
+    dataset_csv: str | None = None
+    # Yutori Navi-Bench dataset config (ignored when dataset_csv is set)
     dataset_name: str = "yutori-ai/navi-bench"
     dataset_splits: list[str] = Field(default_factory=lambda: ["validation"])
     dataset_revision: str | None = None
@@ -228,7 +232,8 @@ Today is: {dt.strftime("%A")}"""
                 key_comb = "+".join("ControlOrMeta" if k == "Meta" else k for k in key_comb.split("+"))
                 await page.keyboard.press(key_comb)
 
-            elif name == "hover":
+            elif name in ("hover", "mouse_move"):
+                # n1.5 renamed 'hover' to 'mouse_move'
                 await page.mouse.move(*_denorm(arguments["coordinates"]))
 
             elif name == "drag":
@@ -472,6 +477,48 @@ async def run_task(
                 logger.opt(exception=True).warning(f"Failed to run task: {e}. Will retry.")
 
 
+def _load_local_csv(config: Config) -> list[DatasetItem]:
+    """Load DatasetItems from a local CSV file instead of HuggingFace."""
+    items = []
+    domain_counter: dict[str, int] = {}
+    overall_counter = 0
+
+    with open(config.dataset_csv, newline="") as f:  # type: ignore[arg-type]
+        for row in csv.DictReader(f):
+            task_id = row["task_id"]
+            domain = row.get("domain", "")
+
+            if config.dataset_include_task_ids and task_id not in config.dataset_include_task_ids:
+                continue
+            if config.dataset_include_domains and domain not in config.dataset_include_domains:
+                continue
+
+            domain_counter[domain] = domain_counter.get(domain, 0) + 1
+            if config.dataset_max_samples_per_domain and domain_counter[domain] > config.dataset_max_samples_per_domain:
+                continue
+
+            overall_counter += 1
+            if config.dataset_max_samples and overall_counter > config.dataset_max_samples:
+                break
+
+            items.append(DatasetItem.model_validate({
+                "task_id": task_id,
+                "task_generation_config_json": row["task_generation_config_json"],
+                "env": row.get("env", "real"),
+                "domain": domain,
+                "l1_category": row.get("l1_category", "travel"),
+                "l2_category": row.get("l2_category") or None,
+                "suggested_difficulty": row.get("suggested_difficulty") or None,
+                "suggested_hint": row.get("suggested_hint") or None,
+                "suggested_max_steps": int(row["suggested_max_steps"]) if row.get("suggested_max_steps") else None,
+                "suggested_split": row.get("suggested_split") or None,
+                "metadata_json": row.get("metadata_json") or None,
+            }))
+
+    logger.info(f"Loaded {len(items)} tasks from {config.dataset_csv}")
+    return items
+
+
 @cli
 async def main(config: Config) -> None:
     os.makedirs(config.eval_save_dir, exist_ok=True)
@@ -488,7 +535,7 @@ async def main(config: Config) -> None:
     if not api_key:
         raise ValueError("No Yutori API key found. Set YUTORI_API_KEY env var or run: yutori auth login")
 
-    dataset = await build_dataset(config)
+    dataset = _load_local_csv(config) if config.dataset_csv else await build_dataset(config)
 
     semaphore = asyncio.Semaphore(config.eval_concurrency)
     async with async_playwright() as playwright, AsyncYutoriClient(api_key=api_key) as client:
