@@ -43,12 +43,13 @@ class FinalResult(BaseModel):
 
 class Rome2RioInfoGathering(BaseMetric):
 
-    def __init__(self, queries):
+    def __init__(self, queries, mode: str = "any"):
         super().__init__()
         self.queries = queries
+        self.mode = mode  # "any": one info matching one query covers a group
         self._infos = []
         self._covered = [False] * len(queries)
-        self.seen_signatures = set() 
+        self.seen_signatures = set()
 
     @property
     def js_script(self):
@@ -118,15 +119,16 @@ class Rome2RioInfoGathering(BaseMetric):
     def _match(self, query, info):
         if "modes" in query:
             page_type = info.get("pageType", "")
+            check = all if self.mode == "all" else any
             if page_type in ("hotels", "experiences"):
                 # Hotels and experiences: match modes against the name field
                 # because JS emits static mode strings ("Hotel", "Experience")
                 name = (info.get("name") or "").lower()
-                if not any(m.lower() in name for m in query["modes"]):
+                if not check(m.lower() in name for m in query["modes"]):
                     return False
             else:
                 mode = (info.get("mode") or "").lower()
-                if not any(m.lower() in mode for m in query["modes"]):
+                if not check(m.lower() in mode for m in query["modes"]):
                     return False
 
         if "max_price" in query:
@@ -135,7 +137,9 @@ class Rome2RioInfoGathering(BaseMetric):
                 return False
 
         if "min_price" in query:
-            price = info.get("min_price")
+            # Use max_price from the scraped range so a route like ₹30k–₹45k
+            # correctly satisfies min_price: 33000 (some options exceed the floor).
+            price = info.get("max_price")
             if price is None or price < query["min_price"]:
                 return False
 
@@ -188,5 +192,6 @@ def generate_task_config_deterministic(
     eval_config = {
         "_target_": get_import_path(Rome2RioInfoGathering),
         "queries": queries,
+        "mode": mode,
     }
     return BaseTaskConfig(url=url, task=task, user_metadata=user_metadata, eval_config=eval_config)
