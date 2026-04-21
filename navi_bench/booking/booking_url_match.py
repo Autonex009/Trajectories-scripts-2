@@ -30,7 +30,6 @@ class BookingVerifierResult(BaseModel):
     gt_url: str = ""
     details: dict = {}
 
-
 # =====================================================================
 # VERIFIER
 # =====================================================================
@@ -376,6 +375,7 @@ class BookingUrlMatch(BaseMetric):
             "depTimeInt": "",
             "arrTimeInt": "",
         }
+        
 
         # Core route 
         result["origin"] = self._get_param(query, "from").lower()
