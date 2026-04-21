@@ -187,6 +187,23 @@ Today is: {dt.strftime("%A")}"""
         y = int(y / limit * config.browser_viewport_height)
         return x, y
 
+    def _normalize_key(k: str) -> str:
+        """Normalize n1.5 lowercase key names to Playwright key names."""
+        _KEY_MAP = {
+            "ctrl": "Control", "control": "Control",
+            "meta": "ControlOrMeta", "cmd": "ControlOrMeta",
+            "alt": "Alt", "shift": "Shift",
+            "enter": "Enter", "return": "Enter",
+            "tab": "Tab", "escape": "Escape", "esc": "Escape",
+            "backspace": "Backspace", "delete": "Delete",
+            "left": "ArrowLeft", "right": "ArrowRight",
+            "up": "ArrowUp", "down": "ArrowDown",
+            "home": "Home", "end": "End",
+            "pageup": "PageUp", "pagedown": "PageDown",
+            "space": "Space",
+        }
+        return _KEY_MAP.get(k.lower(), k)
+
     async def _execute(tool_calls: list[ChatCompletionMessageFunctionToolCall]) -> None:
         for tool_call in tool_calls:
             name = tool_call.function.name
@@ -219,6 +236,7 @@ Today is: {dt.strftime("%A")}"""
                     await page.mouse.wheel(abs(scroll_amount), 0)
 
             elif name == "type":
+                # n1.5 dropped clear_before_typing / press_enter_after options
                 if arguments.get("clear_before_typing", True):
                     await page.keyboard.press("Control+a")
                     await page.wait_for_timeout(50)
@@ -227,10 +245,12 @@ Today is: {dt.strftime("%A")}"""
                 if arguments.get("press_enter_after", True):
                     await page.keyboard.press("Enter")
 
-            elif name == "key_press":
-                key_comb = arguments["key_comb"]
-                key_comb = "+".join("ControlOrMeta" if k == "Meta" else k for k in key_comb.split("+"))
-                await page.keyboard.press(key_comb)
+            elif name in ("key_press", "key"):
+                # n1.5 renamed 'key_press' to 'key'; key names are now lowercase
+                # (e.g. "ctrl+c" instead of "Control+c") — normalize both forms
+                key_comb = arguments.get("key_comb") or arguments.get("key", "")
+                normalized = "+".join(_normalize_key(k) for k in key_comb.split("+"))
+                await page.keyboard.press(normalized)
 
             elif name in ("hover", "mouse_move"):
                 # n1.5 renamed 'hover' to 'mouse_move'
@@ -242,6 +262,22 @@ Today is: {dt.strftime("%A")}"""
                 await page.mouse.move(*_denorm(arguments["coordinates"]))
                 await page.mouse.up()
 
+            elif name == "middle_click":
+                await page.mouse.click(*_denorm(arguments["coordinates"]), button="middle")
+
+            elif name == "mouse_down":
+                await page.mouse.move(*_denorm(arguments["coordinates"]))
+                await page.mouse.down()
+
+            elif name == "mouse_up":
+                await page.mouse.move(*_denorm(arguments["coordinates"]))
+                await page.mouse.up()
+
+            elif name == "hold_key":
+                await page.keyboard.down(arguments["key"])
+                await asyncio.sleep(arguments.get("duration", 0.5))
+                await page.keyboard.up(arguments["key"])
+
             elif name == "wait":
                 await asyncio.sleep(5)
 
@@ -250,6 +286,9 @@ Today is: {dt.strftime("%A")}"""
 
             elif name == "go_back":
                 await page.go_back()
+
+            elif name == "go_forward":
+                await page.go_forward()
 
             elif name == "goto_url":
                 await page.goto(arguments["url"])
