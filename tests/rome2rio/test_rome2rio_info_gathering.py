@@ -192,7 +192,7 @@ class TestUpdateIntegration:
         
         await evaluator.update(page=page)
         assert len(evaluator._infos) == 3
-        assert "hotel_Rho Hotel_12000" in evaluator.seen_signatures
+        assert "hotels_Rho Hotel_12000" in evaluator.seen_signatures
 
     @pytest.mark.asyncio
     @patch("navi_bench.rome2rio.rome2rio_info_gathering.Path.read_text")

@@ -2,7 +2,8 @@ from pydantic import BaseModel
 from typing import TypedDict, List
 from pathlib import Path
 
-from navi_bench.base import BaseMetric
+from navi_bench.base import BaseMetric, BaseTaskConfig, get_import_path
+from navi_bench.dates import initialize_user_metadata, initialize_placeholder_map, render_task_statement
 
 # ---------------- TYPES ----------------
 
@@ -164,3 +165,28 @@ class Rome2RioInfoGathering(BaseMetric):
                 return False
 
         return True
+
+
+# ---------------- TASK CONFIG ----------------
+
+def generate_task_config_deterministic(
+    mode: str,
+    task: str,
+    queries: list,
+    location: str,
+    timezone: str,
+    timestamp: int | None = None,
+    url: str = "https://www.rome2rio.com/",
+    values: dict[str, str] | None = None,
+) -> BaseTaskConfig:
+    user_metadata = initialize_user_metadata(timezone, location, timestamp)
+
+    if values:
+        placeholder_map, _ = initialize_placeholder_map(user_metadata, values)
+        task = render_task_statement(task, placeholder_map)
+
+    eval_config = {
+        "_target_": get_import_path(Rome2RioInfoGathering),
+        "queries": queries,
+    }
+    return BaseTaskConfig(url=url, task=task, user_metadata=user_metadata, eval_config=eval_config)
