@@ -30,10 +30,6 @@ class BookingVerifierResult(BaseModel):
     gt_url: str = ""
     details: dict = {}
 
-def _normalize_airport_code(code: str) -> str:
-        if not code:
-            return ""
-        return code.split(".")[0].lower()
 # =====================================================================
 # VERIFIER
 # =====================================================================
@@ -382,10 +378,8 @@ class BookingUrlMatch(BaseMetric):
         
 
         # Core route 
-        # result["origin"] = self._get_param(query, "from").lower()
-        # result["destination"] = self._get_param(query, "to").lower()
-        result["origin"] = _normalize_airport_code(self._get_param(query, "from"))
-        result["destination"] = _normalize_airport_code(self._get_param(query, "to"))
+        result["origin"] = self._get_param(query, "from").lower()
+        result["destination"] = self._get_param(query, "to").lower()
 
         # Dates
         result["depart_date"] = self._get_param(query, "depart")
