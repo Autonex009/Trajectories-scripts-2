@@ -70,7 +70,7 @@ class Rome2RioInfoGathering(BaseMetric):
                     if page_type in ["hotels", "experiences"]:
                         sig = f"{page_type}_{r.get('name')}_{r.get('min_price')}"
                     else:
-                        sig = f"route_{r.get('mode')}_{r.get('min_price')}_{r.get('duration')}"
+                        sig = f"{page_type}_{r.get('mode')}_{r.get('min_price')}_{r.get('duration')}"
                     
                     if sig not in self.seen_signatures:
                         self.seen_signatures.add(sig)
