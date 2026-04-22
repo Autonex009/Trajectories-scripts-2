@@ -51,6 +51,11 @@ class Rome2RioInfoGathering(BaseMetric):
         self._covered = [False] * len(queries)
         self.seen_signatures = set()
 
+    async def reset(self) -> None:
+        self._infos = []
+        self._covered = [False] * len(self.queries)
+        self.seen_signatures = set()
+
     @property
     def js_script(self):
         return (Path(__file__).parent / "rome2rio_info_gathering.js").read_text()
