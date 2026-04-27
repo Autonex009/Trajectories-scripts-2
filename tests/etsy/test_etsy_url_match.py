@@ -398,3 +398,99 @@ class TestRealTaskScenario:
         assert match is False
         assert "is_star_seller mismatch" in details["mismatches"]
         assert "free_shipping mismatch" in details["mismatches"]
+    
+# ============================================================
+# 12. SINGULAR / PLURAL NORMALIZATION
+# ============================================================
+
+class TestSingularPlural:
+
+    def test_plural_gt_singular_agent(self):
+        gt = f"{BASE}/search?q=wedding+invitation+templates"
+        agent = f"{BASE}/search?q=wedding+invitation+template"
+
+        match, _ = _match(agent, gt)
+        assert match is True
+
+    def test_singular_gt_plural_agent(self):
+        gt = f"{BASE}/search?q=wedding+invitation+template"
+        agent = f"{BASE}/search?q=wedding+invitation+templates"
+
+        match, _ = _match(agent, gt)
+        assert match is True
+
+    def test_plural_variation_ies(self):
+        gt = f"{BASE}/search?q=party"
+        agent = f"{BASE}/search?q=parties"
+
+        match, _ = _match(agent, gt)
+        assert match is True
+
+    def test_plural_variation_es(self):
+        gt = f"{BASE}/search?q=box"
+        agent = f"{BASE}/search?q=boxes"
+
+        match, _ = _match(agent, gt)
+        assert match is True
+
+    def test_multiple_tokens_plural(self):
+        gt = f"{BASE}/search?q=gift+boxes"
+        agent = f"{BASE}/search?q=gifts+box"
+
+        match, _ = _match(agent, gt)
+        assert match is True
+
+    def test_non_plural_word_should_not_match(self):
+        gt = f"{BASE}/search?q=ring"
+        agent = f"{BASE}/search?q=necklace"
+
+        match, _ = _match(agent, gt)
+        assert match is False
+
+# ============================================================
+# 13. SINGULAR / PLURAL EDGE CASES
+# ============================================================
+
+class TestSingularPluralHardEdgeCases:
+
+    def test_series_vs_series_pass(self):
+        gt = f"{BASE}/search?q=series"
+        agent = f"{BASE}/search?q=series"
+
+        match, _ = _match(agent, gt)
+        assert match is True
+
+    def test_status_vs_statuses_pass(self):
+        gt = f"{BASE}/search?q=status"
+        agent = f"{BASE}/search?q=statuses"
+
+        match, _ = _match(agent, gt)
+        assert match is True
+
+    def test_bus_vs_buses_pass(self):
+        gt = f"{BASE}/search?q=bus"
+        agent = f"{BASE}/search?q=buses"
+
+        match, _ = _match(agent, gt)
+        assert match is True
+
+    def test_gas_vs_gases_pass(self):
+        gt = f"{BASE}/search?q=gas"
+        agent = f"{BASE}/search?q=gases"
+
+        match, _ = _match(agent, gt)
+        assert match is True
+
+    def test_mixed_tokens_subset_logic(self):
+        gt = f"{BASE}/search?q=wedding+dress"
+        agent = f"{BASE}/search?q=weddings+dresses+summer"
+
+        match, _ = _match(agent, gt)
+        assert match is True
+
+    def test_reverse_subset_should_fail(self):
+        gt = f"{BASE}/search?q=wedding+dresses+women"
+        agent = f"{BASE}/search?q=wedding+dress"
+
+        match, _ = _match(agent, gt)
+        assert match is False

@@ -190,7 +190,8 @@ class EtsyUrlMatch(BaseMetric):
                     return False, {"mismatches": ["query missing"]}
 
                 # core logic: GT tokens must be subset of agent tokens
-                if not gt_tokens.issubset(agent_tokens):
+                # if not gt_tokens.issubset(agent_tokens):
+                if not self._tokens_match(gt_tokens, agent_tokens):
                     return False, {
                         "mismatches": [
                             f"query mismatch: agent={agent_tokens} vs gt={gt_tokens}"
@@ -608,6 +609,55 @@ class EtsyUrlMatch(BaseMetric):
         stopwords = {"for", "and", "the", "with", "a", "an", "of"}
 
         return {t for t in tokens if t and t not in stopwords}
+
+    def _tokens_match(self, gt_tokens: set[str], agent_tokens: set[str]) -> bool:
+        for gt in gt_tokens:
+            if any(self._token_equivalent(gt, a) for a in agent_tokens):
+                continue
+            return False
+        return True
+
+
+    def _token_equivalent(self, a: str, b: str) -> bool:
+        if a == b:
+            return True
+
+        # -----------------------------
+        # ies ↔ y  (party ↔ parties)
+        # -----------------------------
+        if a.endswith("ies") and a[:-3] + "y" == b:
+            return True
+        if b.endswith("ies") and b[:-3] + "y" == a:
+            return True
+
+        # -----------------------------
+        # es (boxes, dresses, watches)
+        # ONLY for valid endings
+        # -----------------------------
+        es_endings = ("xes", "ches", "shes", "zes", "ses")
+
+        if a.endswith(es_endings) and a[:-2] == b:
+            return True
+        if b.endswith(es_endings) and b[:-2] == a:
+            return True
+
+        # -----------------------------
+        # simple 's' plural
+        # but AVOID bad stems
+        # -----------------------------
+        def valid_s_plural(x, y):
+            return (
+                x.endswith("s")
+                and not x.endswith(("ss", "us", "is"))
+                and x[:-1] == y
+            )
+
+        if valid_s_plural(a, b):
+            return True
+        if valid_s_plural(b, a):
+            return True
+
+        return False
  
 # =====================================================================
 # TASK CONFIG
