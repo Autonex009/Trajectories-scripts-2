@@ -13,35 +13,16 @@ The verifier handles all Facebook Marketplace URL variations including:
 - Item condition: itemCondition=new|used_like_new|used_good|used_fair
 - Days since listed: daysSinceListed=1|7|30
 - Delivery method: deliveryMethod=local_pick_up|shipping
-- Exact match toggle: exact=true|false
-- Vehicle filters: minYear, maxYear, minMileage, maxMileage, topLevelVehicleType, make, model
 - Property filters: minBedrooms, maxBedrooms, minBathrooms, propertyType
 
-Browser-Verified Patterns (Apr 2026 on facebook.com/marketplace):
-  Search path: /marketplace/{city_slug}/search/?query={term}&{filters}
-  Category path: /marketplace/category/{category_slug}/
-  Listing path: /marketplace/item/{numeric_id}/
-  City slug: sanfrancisco, newyork, losangeles, chicago, london, etc.
-  Condition: itemCondition=new|used_like_new|used_good|used_fair
-  Sort: sortBy=best_match|price_ascend|price_descend|creation_time_descend|distance_ascend
-  Days: daysSinceListed=1 (24h), 7 (week), 30 (month)
-  Delivery: deliveryMethod=local_pick_up|shipping
-  Price: minPrice=INT, maxPrice=INT
-  Exact: exact=true|false
+Browser-Verified CLICKABLE Filters (Apr 2026 on facebook.com/marketplace):
+  General search sidebar:
+    query, minPrice, maxPrice, sortBy, itemCondition, daysSinceListed, deliveryMethod
+  Property for rent sidebar:
+    Price, Bedrooms, Bathrooms, Type of property, Square feet
 
-Category Slugs (Browser-Verified Apr 2026):
-  vehicles        → /marketplace/category/vehicles/
-  electronics     → /marketplace/category/electronics/
-  propertyrentals → /marketplace/category/propertyrentals/
-  apparel         → /marketplace/category/apparel/
-  furniture       → /marketplace/category/furniture/ (or /home/)
-  entertainment   → /marketplace/category/entertainment/
-  garden          → /marketplace/category/garden/
-  hobbies         → /marketplace/category/hobbies/
-  sporting        → /marketplace/category/sporting/
-  toys            → /marketplace/category/toys/
-  free            → /marketplace/category/free/
-  pets            → /marketplace/category/pets/ (if region-available)
+  NOT clickable (removed from verifier — server-side only, bot cannot set):
+    exact, minYear, maxYear, maxMileage, make, model, topLevelVehicleType
 
 Note: Location is set via city_slug in URL path AND radius is session-based.
 The verifier compares city_slug when GT specifies it.
@@ -214,21 +195,6 @@ KNOWN_CITY_SLUGS = {
     "mumbai", "delhi", "bangalore", "hyderabad",
 }
 
-# Vehicle type normalization
-VEHICLE_TYPE_MAP = {
-    "car_truck": "car_truck",
-    "car": "car_truck",
-    "truck": "car_truck",
-    "motorcycle": "motorcycle",
-    "rv_camper": "rv_camper",
-    "rv": "rv_camper",
-    "camper": "rv_camper",
-    "boat": "boat",
-    "powersport": "powersport",
-    "trailer": "trailer",
-    "commercial": "commercial",
-}
-
 # Property type normalization
 PROPERTY_TYPE_MAP = {
     "house": "house",
@@ -304,13 +270,6 @@ def _normalize_delivery(raw: str) -> str:
     if not raw:
         return ""
     return DELIVERY_MAP.get(raw.lower().strip(), raw.lower().strip())
-
-
-def _normalize_vehicle_type(raw: str) -> str:
-    """Normalize vehicle type to canonical value."""
-    if not raw:
-        return ""
-    return VEHICLE_TYPE_MAP.get(raw.lower().strip(), raw.lower().strip())
 
 
 def _normalize_property_type(raw: str) -> str:
@@ -396,25 +355,15 @@ def _extract_category_slug(path: str) -> str:
 def parse_marketplace_url(url: str) -> dict[str, Any]:
     """Parse a Facebook Marketplace URL into normalized components.
 
-    Facebook Marketplace URL anatomy (browser-verified Apr 2026):
-      /marketplace/{city_slug}/search?
-        query=iphone+15
-        &minPrice=100
-        &maxPrice=500
-        &sortBy=creation_time_descend
-        &daysSinceListed=7
-        &itemCondition=new
-        &deliveryMethod=local_pick_up
-        &exact=true
+    Only parses CLICKABLE filters (browser-verified Apr 2026).
+    Non-clickable params (exact, year, mileage, make, model, vehicleType)
+    are intentionally NOT parsed — bots cannot set them via UI clicks.
 
     Returns dict with keys:
       city_slug, category_slug, query, min_price, max_price,
       sort_by, days_since_listed, item_condition, delivery_method,
-      exact, category_id,
-      # Vehicle-specific
-      min_year, max_year, min_mileage, max_mileage,
-      vehicle_type, make, model,
-      # Property-specific
+      category_id,
+      # Property-specific (clickable in /category/propertyrentals/)
       min_bedrooms, max_bedrooms, min_bathrooms, property_type
     """
     parsed = urlparse(url.strip())
@@ -424,7 +373,7 @@ def parse_marketplace_url(url: str) -> dict[str, Any]:
         # Path-derived
         "city_slug": "",
         "category_slug": "",
-        # General search
+        # General search (all clickable)
         "query": "",
         "min_price": None,
         "max_price": None,
@@ -432,17 +381,8 @@ def parse_marketplace_url(url: str) -> dict[str, Any]:
         "days_since_listed": None,
         "item_condition": "",
         "delivery_method": "",
-        "exact": None,
         "category_id": "",
-        # Vehicle-specific
-        "min_year": None,
-        "max_year": None,
-        "min_mileage": None,
-        "max_mileage": None,
-        "vehicle_type": "",
-        "make": "",
-        "model": "",
-        # Property-specific
+        # Property-specific (clickable in property rent view)
         "min_bedrooms": None,
         "max_bedrooms": None,
         "min_bathrooms": None,
@@ -467,7 +407,7 @@ def parse_marketplace_url(url: str) -> dict[str, Any]:
 
     # Days since listed
     result["days_since_listed"] = _get_int_param(
-        query, "daysSinceListed", "daysssincelisted"
+        query, "daysSinceListed", "dayssincelisted"
     )
 
     # Item condition
@@ -478,32 +418,10 @@ def parse_marketplace_url(url: str) -> dict[str, Any]:
     raw_delivery = _get_param(query, "deliveryMethod", "deliverymethod")
     result["delivery_method"] = _normalize_delivery(raw_delivery)
 
-    # Exact match
-    raw_exact = _get_param(query, "exact")
-    if raw_exact:
-        result["exact"] = raw_exact.lower().strip() == "true"
-
     # Category ID (query param)
     result["category_id"] = _get_param(query, "category_id", "categoryID")
 
-    # Vehicle-specific
-    result["min_year"] = _get_int_param(query, "minYear", "minyear")
-    result["max_year"] = _get_int_param(query, "maxYear", "maxyear")
-    result["min_mileage"] = _get_int_param(query, "minMileage", "minmileage")
-    result["max_mileage"] = _get_int_param(query, "maxMileage", "maxmileage")
-
-    raw_vehicle_type = _get_param(
-        query, "topLevelVehicleType", "toplevelVehicleType", "vehicletype"
-    )
-    result["vehicle_type"] = _normalize_vehicle_type(raw_vehicle_type)
-
-    raw_make = _get_param(query, "make")
-    result["make"] = raw_make.lower().strip() if raw_make else ""
-
-    raw_model = _get_param(query, "model")
-    result["model"] = raw_model.lower().strip() if raw_model else ""
-
-    # Property-specific
+    # Property-specific (clickable in /category/propertyrentals/ sidebar)
     result["min_bedrooms"] = _get_int_param(query, "minBedrooms", "minbedrooms")
     result["max_bedrooms"] = _get_int_param(query, "maxBedrooms", "maxbedrooms")
     result["min_bathrooms"] = _get_int_param(query, "minBathrooms", "minbathrooms")
@@ -800,117 +718,10 @@ class FbMarketplaceUrlMatch(BaseMetric):
                     )
                     return False, details
 
-            # 11. Exact match toggle
-            if gt["exact"] is not None:
-                if agent["exact"] is None:
-                    details["mismatches"].append(
-                        f"Exact flag missing (expected {gt['exact']})"
-                    )
-                    return False, details
-                if agent["exact"] != gt["exact"]:
-                    details["mismatches"].append(
-                        f"Exact: {agent['exact']} vs {gt['exact']}"
-                    )
-                    return False, details
-
-            # ============================================================
-            # Vehicle-specific filters
-            # ============================================================
-
-            # 12. Min year
-            if gt["min_year"] is not None:
-                if agent["min_year"] is None:
-                    details["mismatches"].append(
-                        f"Min year missing (expected {gt['min_year']})"
-                    )
-                    return False, details
-                if agent["min_year"] != gt["min_year"]:
-                    details["mismatches"].append(
-                        f"Min year: {agent['min_year']} vs {gt['min_year']}"
-                    )
-                    return False, details
-
-            # 13. Max year
-            if gt["max_year"] is not None:
-                if agent["max_year"] is None:
-                    details["mismatches"].append(
-                        f"Max year missing (expected {gt['max_year']})"
-                    )
-                    return False, details
-                if agent["max_year"] != gt["max_year"]:
-                    details["mismatches"].append(
-                        f"Max year: {agent['max_year']} vs {gt['max_year']}"
-                    )
-                    return False, details
-
-            # 14. Min mileage
-            if gt["min_mileage"] is not None:
-                if agent["min_mileage"] is None:
-                    details["mismatches"].append(
-                        f"Min mileage missing (expected {gt['min_mileage']})"
-                    )
-                    return False, details
-                if agent["min_mileage"] != gt["min_mileage"]:
-                    details["mismatches"].append(
-                        f"Min mileage: {agent['min_mileage']} "
-                        f"vs {gt['min_mileage']}"
-                    )
-                    return False, details
-
-            # 15. Max mileage
-            if gt["max_mileage"] is not None:
-                if agent["max_mileage"] is None:
-                    details["mismatches"].append(
-                        f"Max mileage missing (expected {gt['max_mileage']})"
-                    )
-                    return False, details
-                if agent["max_mileage"] != gt["max_mileage"]:
-                    details["mismatches"].append(
-                        f"Max mileage: {agent['max_mileage']} "
-                        f"vs {gt['max_mileage']}"
-                    )
-                    return False, details
-
-            # 16. Vehicle type
-            if gt["vehicle_type"]:
-                if not agent["vehicle_type"]:
-                    details["mismatches"].append(
-                        f"Vehicle type missing "
-                        f"(expected '{gt['vehicle_type']}')"
-                    )
-                    return False, details
-                if agent["vehicle_type"] != gt["vehicle_type"]:
-                    details["mismatches"].append(
-                        f"Vehicle type: '{agent['vehicle_type']}' "
-                        f"vs '{gt['vehicle_type']}'"
-                    )
-                    return False, details
-
-            # 17. Make
-            if gt["make"]:
-                if not agent["make"]:
-                    details["mismatches"].append(
-                        f"Make missing (expected '{gt['make']}')"
-                    )
-                    return False, details
-                if agent["make"] != gt["make"]:
-                    details["mismatches"].append(
-                        f"Make: '{agent['make']}' vs '{gt['make']}'"
-                    )
-                    return False, details
-
-            # 18. Model
-            if gt["model"]:
-                if not agent["model"]:
-                    details["mismatches"].append(
-                        f"Model missing (expected '{gt['model']}')"
-                    )
-                    return False, details
-                if agent["model"] != gt["model"]:
-                    details["mismatches"].append(
-                        f"Model: '{agent['model']}' vs '{gt['model']}'"
-                    )
-                    return False, details
+            # NOTE: Vehicle-specific filters (year, mileage, make, model,
+            # vehicleType) and exact match toggle have been REMOVED because
+            # they are NOT clickable in the Facebook Marketplace sidebar UI.
+            # A bot navigating the site cannot set these via UI interactions.
 
             # ============================================================
             # Property-specific filters
