@@ -35,7 +35,7 @@ if PROJECT_ROOT not in sys.path:
 from playwright.async_api import async_playwright
 from loguru import logger
 
-from navi_bench.fb_marketplace.fb_marketplace_url_match import (
+from navi_bench.facebookmarketplace.facebookmarketplace_url_match import (
     FbMarketplaceUrlMatch,
     generate_task_config,
 )
@@ -127,85 +127,88 @@ def build_scenarios() -> list[DemoScenario]:
             hint="sortBy=creation_time_descend + deliveryMethod=local_pick_up.",
         ),
 
-        # G3 — Days + exact + price + city
+        # G3 — Days + price + condition + delivery
         DemoScenario(
             task_id="fb_marketplace/demo/general/vinyl",
-            name="[GENERAL] Vinyl Records — Chicago, <$50, Week, Exact",
+            name="[GENERAL] Vinyl Records — Chicago, <$50, Week, Pickup",
             category="general",
-            description="Days since listed + exact match + price + city",
+            description="Days since listed + price + condition + delivery",
             task_prompt=(
                 "I collect vinyl records and I'm specifically looking for ones in the Chicago area. "
                 "My budget maxes out at $50. I only want to see listings from the past week — "
-                "anything older is probably already gone. Show me exact matches only."
+                "anything older is probably already gone. Good condition. Local pickup."
             ),
             gt_url=[
                 "https://www.facebook.com/marketplace/chicago/search/"
-                "?query=vinyl+records&maxPrice=50&daysSinceListed=7&exact=true"
+                "?query=vinyl+records&maxPrice=50&daysSinceListed=7"
+                "&itemCondition=used_good&deliveryMethod=local_pick_up"
             ],
-            tags=["general", "days", "exact", "price"],
-            hint="daysSinceListed=7 + exact=true must both appear.",
+            tags=["general", "days", "delivery", "price"],
+            hint="daysSinceListed=7 + deliveryMethod=local_pick_up + condition.",
         ),
     ]
 
-    # ---------- VEHICLES ----------
-    vehicles = [
-        # V1 — Full vehicle filter stack
+    # ---------- DIVERSE CATEGORIES (replacing old vehicle tasks) ----------
+    diverse_category = [
+        # DC1 — Electronics + price + condition + sort
         DemoScenario(
-            task_id="fb_marketplace/demo/vehicle/camry",
-            name="[VEHICLE] Toyota Camry — Dallas, 2019+, <60K mi, $15K–$25K",
-            category="vehicles",
-            description="Full vehicle filter stack: make + model + year + mileage + price + type",
+            task_id="fb_marketplace/demo/diverse/monitor",
+            name="[ELECTRONICS] 27-inch Monitor — Dallas, $100–$350, Good, Cheapest",
+            category="general",
+            description="Electronics search with price + condition + sort + delivery",
             task_prompt=(
-                "I'm looking for a used Toyota Camry, 2019 or newer, with less than 60,000 miles. "
-                "Budget is $15,000 to $25,000. Dallas area."
+                "My home office monitor just died and I need a replacement fast. Looking for a "
+                "27-inch monitor in Dallas, budget $100 to $350. Used in good condition is fine — "
+                "I just need it to work. Sort by cheapest first. Local pickup."
             ),
             gt_url=[
                 "https://www.facebook.com/marketplace/dallas/search/"
-                "?query=toyota+camry&minPrice=15000&maxPrice=25000"
-                "&minYear=2019&maxMileage=60000"
-                "&topLevelVehicleType=car_truck&make=toyota&model=camry"
+                "?query=27+inch+monitor&minPrice=100&maxPrice=350"
+                "&itemCondition=used_good&sortBy=price_ascend&deliveryMethod=local_pick_up"
             ],
-            tags=["vehicle", "make", "model", "year", "mileage", "price"],
-            hint="All vehicle filters: make, model, minYear, maxMileage, topLevelVehicleType.",
+            tags=["electronics", "price_range", "sort", "condition", "delivery"],
+            hint="6 filters: query + price range + condition + sort + delivery. City slug in path.",
         ),
 
-        # V2 — Motorcycle type
+        # DC2 — Musical instruments + days + condition
         DemoScenario(
-            task_id="fb_marketplace/demo/vehicle/harley",
-            name="[VEHICLE] Harley Davidson — Phoenix, $8K–$20K, 2010+, Cheapest",
-            category="vehicles",
-            description="Motorcycle type + make + year + sort",
+            task_id="fb_marketplace/demo/diverse/guitar",
+            name="[MUSIC] Acoustic Guitar — Austin, $50–$200, Good, Week",
+            category="general",
+            description="Musical instrument with price + condition + sort + days + delivery",
             task_prompt=(
-                "Looking for a motorcycle — specifically a Harley Davidson. Budget: $8,000 to "
-                "$20,000. Phoenix area. Year 2010 or newer. Want to see prices lowest to highest."
+                "My son needs a guitar for his school band. Looking for an acoustic guitar in Austin. "
+                "Budget $50 to $200. Good condition minimum — it needs to stay in tune. Show me the "
+                "cheapest first. Only stuff listed this week. Local pickup."
+            ),
+            gt_url=[
+                "https://www.facebook.com/marketplace/austin/search/"
+                "?query=acoustic+guitar&minPrice=50&maxPrice=200"
+                "&itemCondition=used_good&sortBy=price_ascend"
+                "&daysSinceListed=7&deliveryMethod=local_pick_up"
+            ],
+            tags=["music", "price_range", "sort", "condition", "days", "delivery"],
+            hint="7 clickable filters: query, price range, condition, sort, days, delivery.",
+        ),
+
+        # DC3 — Sporting goods + nearest
+        DemoScenario(
+            task_id="fb_marketplace/demo/diverse/dumbbells",
+            name="[SPORTING] Adjustable Dumbbells — Phoenix, $80–$300, Like-New",
+            category="general",
+            description="Sporting goods with price + condition + sort by nearest + days",
+            task_prompt=(
+                "Starting a home gym and I need dumbbells. Looking in Phoenix for adjustable dumbbells. "
+                "My budget is $80 to $300. Like-new condition — I don't want rusty weights. Sort by "
+                "nearest to me since these are heavy. Listed in the past week only."
             ),
             gt_url=[
                 "https://www.facebook.com/marketplace/phoenix/search/"
-                "?query=harley+davidson&minPrice=8000&maxPrice=20000"
-                "&minYear=2010&topLevelVehicleType=motorcycle"
-                "&make=harley+davidson&sortBy=price_ascend"
+                "?query=adjustable+dumbbells&minPrice=80&maxPrice=300"
+                "&itemCondition=used_like_new&sortBy=distance_ascend&daysSinceListed=7"
             ],
-            tags=["vehicle", "motorcycle", "make", "year", "sort"],
-            hint="topLevelVehicleType=motorcycle (not car_truck).",
-        ),
-
-        # V3 — Boat type + sort
-        DemoScenario(
-            task_id="fb_marketplace/demo/vehicle/boat",
-            name="[VEHICLE] Fishing Boat — Chicago, $5K–$15K, Newest",
-            category="vehicles",
-            description="Vehicle type boat + sort by newest",
-            task_prompt=(
-                "Need a boat for lake fishing. Nothing fancy — a small fishing boat or bass boat. "
-                "Chicago area. Budget $5,000 to $15,000. Want to see the newest listings."
-            ),
-            gt_url=[
-                "https://www.facebook.com/marketplace/chicago/search/"
-                "?query=fishing+boat&minPrice=5000&maxPrice=15000"
-                "&topLevelVehicleType=boat&sortBy=creation_time_descend"
-            ],
-            tags=["vehicle", "boat", "sort"],
-            hint="topLevelVehicleType=boat + sortBy=creation_time_descend.",
+            tags=["sporting", "price_range", "condition", "sort", "days"],
+            hint="sortBy=distance_ascend + daysSinceListed=7 + itemCondition=used_like_new.",
         ),
     ]
 
@@ -301,12 +304,12 @@ def build_scenarios() -> list[DemoScenario]:
                 "My birthday money situation: Grandma gave $100, uncle gave $75, parents gave $250, "
                 "and my sister gave a $25 gift card which I can't use on Marketplace. So I have $425 "
                 "in cash. Looking for a PlayStation 5 in New York. Used like-new is fine. "
-                "Show me exact matches only, sorted by cheapest first. Local pickup."
+                "Sort by cheapest first. Local pickup."
             ),
             gt_url=[
                 "https://www.facebook.com/marketplace/newyork/search/"
                 "?query=playstation+5&maxPrice=425&itemCondition=used_like_new"
-                "&exact=true&sortBy=price_ascend&deliveryMethod=local_pick_up"
+                "&sortBy=price_ascend&deliveryMethod=local_pick_up"
             ],
             tags=["price_math", "exclusion"],
             hint="EXCLUDE the $25 gift card: $100+$75+$250=$425 only. maxPrice=425.",
@@ -325,12 +328,12 @@ def build_scenarios() -> list[DemoScenario]:
                 "I'm a professional photographer who shoots with Canon. My friend Dave just switched "
                 "to Sony and won't stop talking about how much better the autofocus is. He's so annoying. "
                 "Anyway, I need a Canon 70-200mm f/2.8 lens. Los Angeles. $500 to $1,500. "
-                "Like-new only. Sort by cheapest. Exact matches only. Dave can keep his Sony opinions."
+                "Like-new only. Sort by cheapest. Dave can keep his Sony opinions."
             ),
             gt_url=[
                 "https://www.facebook.com/marketplace/losangeles/search/"
                 "?query=canon+70-200mm+f2.8&minPrice=500&maxPrice=1500"
-                "&itemCondition=used_like_new&sortBy=price_ascend&exact=true"
+                "&itemCondition=used_like_new&sortBy=price_ascend"
             ],
             tags=["red_herring", "brand_debate"],
             hint="Dave's Sony opinions are IRRELEVANT. Only Canon lens filters matter.",
@@ -370,17 +373,17 @@ def build_scenarios() -> list[DemoScenario]:
                 "I need a very specific setup for my home studio. Looking for a 49-key MIDI keyboard "
                 "controller in San Francisco. Budget is between $100 and $350. Must be in like-new "
                 "condition because I'm recording an album and can't deal with sticky keys. "
-                "Show me exact matches only, sorted by cheapest first. Only interested in listings "
+                "Sort by cheapest first. Only interested in listings "
                 "from the past week. Local pickup — I ride the Muni and can carry it on the bus."
             ),
             gt_url=[
                 "https://www.facebook.com/marketplace/sanfrancisco/search/"
                 "?query=49+key+midi+keyboard+controller&minPrice=100&maxPrice=350"
-                "&itemCondition=used_like_new&exact=true&sortBy=price_ascend"
+                "&itemCondition=used_like_new&sortBy=price_ascend"
                 "&daysSinceListed=7&deliveryMethod=local_pick_up"
             ],
             tags=["ultra_hard", "all_filters"],
-            hint="ALL 7 filters must be set: query, price range, condition, exact, sort, days, delivery.",
+            hint="ALL 7 clickable filters: query, price range, condition, sort, days, delivery.",
         ),
 
         # UH2 — Income math + property filters
@@ -406,7 +409,7 @@ def build_scenarios() -> list[DemoScenario]:
         ),
     ]
 
-    return general + vehicles + property_rentals + price_math + red_herrings + ultra_hard
+    return general + diverse_category + property_rentals + price_math + red_herrings + ultra_hard
 
 
 # =============================================================================

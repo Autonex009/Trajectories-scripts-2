@@ -8,19 +8,22 @@ Tests cover:
 - Sort order normalization and matching
 - Category slug/ID matching
 - City slug extraction and matching
-- Vehicle filters (year, mileage, make, model, type)
-- Property filters (bedrooms, bathrooms, property type)
+- Property filters (bedrooms, bathrooms, property type) — CLICKABLE
 - Full URL matching integration (all field mismatches)
 - Domain validation (facebook.com, m.facebook.com, rejection)
 - Async lifecycle (reset/update/compute)
 - Multi-GT URL OR semantics
 - Edge cases (empty, non-marketplace, login redirects)
+
+Note: Vehicle-specific filters (year, mileage, make, model, vehicleType)
+and exact match toggle are NOT tested because they are NOT clickable in the
+Facebook Marketplace sidebar UI. A bot cannot set these via UI interactions.
 """
 
 import asyncio
 import pytest
 
-from navi_bench.fb_marketplace.fb_marketplace_url_match import (
+from navi_bench.facebookmarketplace.facebookmarketplace_url_match import (
     FbMarketplaceUrlMatch,
     _extract_category_slug,
     _extract_city_slug,
@@ -29,7 +32,6 @@ from navi_bench.fb_marketplace.fb_marketplace_url_match import (
     _normalize_property_type,
     _normalize_query_text,
     _normalize_sort_order,
-    _normalize_vehicle_type,
     parse_marketplace_url,
 )
 
@@ -53,13 +55,12 @@ class TestUrlParsing:
         assert parsed["min_price"] == 100
         assert parsed["max_price"] == 500
 
-    def test_full_search_url_all_filters(self):
+    def test_full_search_url_all_clickable_filters(self):
         url = (
             "https://www.facebook.com/marketplace/newyork/search/"
             "?query=sofa&minPrice=50&maxPrice=800"
             "&sortBy=creation_time_descend&daysSinceListed=7"
             "&itemCondition=used_good&deliveryMethod=local_pick_up"
-            "&exact=true"
         )
         parsed = parse_marketplace_url(url)
         assert parsed["city_slug"] == "newyork"
@@ -70,7 +71,6 @@ class TestUrlParsing:
         assert parsed["days_since_listed"] == 7
         assert parsed["item_condition"] == "used_good"
         assert parsed["delivery_method"] == "local_pick_up"
-        assert parsed["exact"] is True
 
     def test_category_url(self):
         url = "https://www.facebook.com/marketplace/category/vehicles/"
@@ -93,21 +93,25 @@ class TestUrlParsing:
         assert parsed["sort_by"] == ""
         assert parsed["item_condition"] == ""
 
-    def test_vehicle_params(self):
+    def test_non_clickable_params_ignored(self):
+        """Vehicle-specific and exact params should NOT be parsed."""
         url = (
             "https://www.facebook.com/marketplace/chicago/search/"
             "?query=toyota+camry&minYear=2018&maxYear=2023"
-            "&minMileage=0&maxMileage=50000"
-            "&topLevelVehicleType=car_truck&make=toyota&model=camry"
+            "&maxMileage=50000&topLevelVehicleType=car_truck"
+            "&make=toyota&model=camry&exact=true"
         )
         parsed = parse_marketplace_url(url)
-        assert parsed["min_year"] == 2018
-        assert parsed["max_year"] == 2023
-        assert parsed["min_mileage"] == 0
-        assert parsed["max_mileage"] == 50000
-        assert parsed["vehicle_type"] == "car_truck"
-        assert parsed["make"] == "toyota"
-        assert parsed["model"] == "camry"
+        # Query and clickable params should be parsed
+        assert parsed["query"] == "toyota camry"
+        # Non-clickable params should NOT appear in parsed output
+        assert "min_year" not in parsed
+        assert "max_year" not in parsed
+        assert "max_mileage" not in parsed
+        assert "vehicle_type" not in parsed
+        assert "make" not in parsed
+        assert "model" not in parsed
+        assert "exact" not in parsed
 
     def test_property_params(self):
         url = (
@@ -373,68 +377,54 @@ class TestCitySlugMatching:
 
 
 # =============================================================================
-# 8. Vehicle Filter Matching
+# 8. Clickable Filter Coverage (Delivery, Days, Sort combinations)
 # =============================================================================
 
 
-class TestVehicleFilters:
-    """Tests for vehicle-specific filter matching."""
+class TestClickableFilterCombinations:
+    """Tests for clickable filter combinations that a bot can actually set."""
 
-    def test_year_range_match(self):
-        gt = "https://www.facebook.com/marketplace/search/?query=car&minYear=2018&maxYear=2023"
-        agent = "https://www.facebook.com/marketplace/search/?query=car&minYear=2018&maxYear=2023"
+    def test_delivery_plus_days_match(self):
+        gt = "https://www.facebook.com/marketplace/search/?query=desk&deliveryMethod=local_pick_up&daysSinceListed=7"
+        agent = "https://www.facebook.com/marketplace/search/?query=desk&deliveryMethod=local_pick_up&daysSinceListed=7"
         v = FbMarketplaceUrlMatch(gt_url=gt)
         match, _ = v._urls_match(agent, gt)
         assert match is True
 
-    def test_year_mismatch(self):
-        gt = "https://www.facebook.com/marketplace/search/?query=car&minYear=2018"
-        agent = "https://www.facebook.com/marketplace/search/?query=car&minYear=2020"
+    def test_delivery_mismatch(self):
+        gt = "https://www.facebook.com/marketplace/search/?query=desk&deliveryMethod=local_pick_up"
+        agent = "https://www.facebook.com/marketplace/search/?query=desk&deliveryMethod=shipping"
         v = FbMarketplaceUrlMatch(gt_url=gt)
         match, details = v._urls_match(agent, gt)
         assert match is False
-        assert "Min year" in details["mismatches"][0]
+        assert "Delivery" in details["mismatches"][0]
 
-    def test_mileage_match(self):
-        gt = "https://www.facebook.com/marketplace/search/?query=car&maxMileage=50000"
-        agent = "https://www.facebook.com/marketplace/search/?query=car&maxMileage=50000"
+    def test_all_clickable_filters_combined(self):
+        gt = (
+            "https://www.facebook.com/marketplace/dallas/search/"
+            "?query=standing+desk&minPrice=100&maxPrice=500"
+            "&sortBy=price_ascend&itemCondition=used_good"
+            "&daysSinceListed=7&deliveryMethod=local_pick_up"
+        )
+        agent = gt  # identical
         v = FbMarketplaceUrlMatch(gt_url=gt)
         match, _ = v._urls_match(agent, gt)
         assert match is True
 
-    def test_mileage_mismatch(self):
-        gt = "https://www.facebook.com/marketplace/search/?query=car&maxMileage=50000"
-        agent = "https://www.facebook.com/marketplace/search/?query=car&maxMileage=100000"
-        v = FbMarketplaceUrlMatch(gt_url=gt)
-        match, details = v._urls_match(agent, gt)
-        assert match is False
-
-    def test_vehicle_type_match(self):
-        gt = "https://www.facebook.com/marketplace/search/?query=truck&topLevelVehicleType=car_truck"
-        agent = "https://www.facebook.com/marketplace/search/?query=truck&topLevelVehicleType=car_truck"
+    def test_sort_distance_ascend(self):
+        gt = "https://www.facebook.com/marketplace/search/?query=bike&sortBy=distance_ascend"
+        agent = "https://www.facebook.com/marketplace/search/?query=bike&sortBy=distance_ascend"
         v = FbMarketplaceUrlMatch(gt_url=gt)
         match, _ = v._urls_match(agent, gt)
         assert match is True
 
-    def test_vehicle_type_normalization(self):
-        assert _normalize_vehicle_type("car") == "car_truck"
-        assert _normalize_vehicle_type("motorcycle") == "motorcycle"
-        assert _normalize_vehicle_type("rv") == "rv_camper"
+    def test_sort_alias_nearest(self):
+        assert _normalize_sort_order("nearest") == "distance_ascend"
 
-    def test_make_model_match(self):
-        gt = "https://www.facebook.com/marketplace/search/?query=honda+civic&make=honda&model=civic"
-        agent = "https://www.facebook.com/marketplace/search/?query=honda+civic&make=honda&model=civic"
-        v = FbMarketplaceUrlMatch(gt_url=gt)
-        match, _ = v._urls_match(agent, gt)
-        assert match is True
-
-    def test_make_mismatch(self):
-        gt = "https://www.facebook.com/marketplace/search/?query=car&make=honda"
-        agent = "https://www.facebook.com/marketplace/search/?query=car&make=toyota"
-        v = FbMarketplaceUrlMatch(gt_url=gt)
-        match, details = v._urls_match(agent, gt)
-        assert match is False
-        assert "Make" in details["mismatches"][0]
+    def test_delivery_alias_pickup(self):
+        assert _normalize_delivery("pickup") == "local_pick_up"
+        assert _normalize_delivery("local_pickup") == "local_pick_up"
+        assert _normalize_delivery("shipped") == "shipping"
 
 
 # =============================================================================
@@ -572,33 +562,24 @@ class TestUrlMatchingIntegration:
         match, _ = v._urls_match(agent, gt)
         assert match is True
 
-    def test_exact_flag_match(self):
-        gt = "https://www.facebook.com/marketplace/search/?query=macbook&exact=true"
-        agent = "https://www.facebook.com/marketplace/search/?query=macbook&exact=true"
+    def test_combined_property_filters(self):
+        """Test all clickable property filters combined."""
+        gt = (
+            "https://www.facebook.com/marketplace/boston/search/"
+            "?minPrice=1500&maxPrice=3000"
+            "&minBedrooms=2&maxBedrooms=3&minBathrooms=1"
+            "&propertyType=apartment"
+        )
+        agent = gt
         v = FbMarketplaceUrlMatch(gt_url=gt)
         match, _ = v._urls_match(agent, gt)
         assert match is True
 
-    def test_exact_flag_mismatch(self):
-        gt = "https://www.facebook.com/marketplace/search/?query=macbook&exact=true"
-        agent = "https://www.facebook.com/marketplace/search/?query=macbook&exact=false"
-        v = FbMarketplaceUrlMatch(gt_url=gt)
-        match, details = v._urls_match(agent, gt)
-        assert match is False
-
-    def test_combined_vehicle_filters(self):
-        gt = (
-            "https://www.facebook.com/marketplace/dallas/search/"
-            "?query=ford+f150&minYear=2018&maxYear=2023"
-            "&maxMileage=80000&topLevelVehicleType=car_truck"
-            "&make=ford&model=f150&minPrice=15000&maxPrice=35000"
-        )
-        agent = (
-            "https://www.facebook.com/marketplace/dallas/search/"
-            "?query=ford+f150&minYear=2018&maxYear=2023"
-            "&maxMileage=80000&topLevelVehicleType=car_truck"
-            "&make=ford&model=f150&minPrice=15000&maxPrice=35000"
-        )
+    def test_non_clickable_params_in_url_are_ignored(self):
+        """URLs with non-clickable params should still match on clickable params only."""
+        gt = "https://www.facebook.com/marketplace/search/?query=desk&minPrice=50"
+        # Agent URL has extra non-clickable params - should still match
+        agent = "https://www.facebook.com/marketplace/search/?query=desk&minPrice=50&exact=true&make=ikea"
         v = FbMarketplaceUrlMatch(gt_url=gt)
         match, _ = v._urls_match(agent, gt)
         assert match is True
