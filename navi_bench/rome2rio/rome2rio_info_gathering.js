@@ -53,7 +53,7 @@
       const airlineImgs = card.querySelectorAll('img[alt]');
       const airlines = Array.from(airlineImgs)
         .map(img => img.alt.trim())
-        .filter(alt => alt && !alt.toLowerCase().includes("kayak")); 
+        .filter(alt => alt);
       
       const uniqueAirlines = [...new Set(airlines)];
       const mode = uniqueAirlines.length > 0 ? uniqueAirlines.join(", ") : "Flight";
@@ -156,7 +156,9 @@
   experienceCards.forEach(card => {
     try {
       const nameEl = card.querySelector('h3');
-      if (!nameEl) return; // Skip if not an experience card
+      if (!nameEl) return;
+      const priceGuard = card.querySelector('.text-base.font-bold');
+      if (!priceGuard) return; // Skip non-experience articles (blog posts, widgets, etc.)
       let name = nameEl.textContent.trim();
 
       // Convert "8 hours", "1 day", or "90 minutes" text to duration in minutes

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from playwright.async_api import async_playwright
 from loguru import logger
 
-from rome2rio_info_gathering import Rome2RioInfoGathering
+from navi_bench.rome2rio.rome2rio_info_gathering import Rome2RioInfoGathering
 
 
 # ---------------- CONFIG ----------------
