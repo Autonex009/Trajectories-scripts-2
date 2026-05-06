@@ -37,8 +37,6 @@ from urllib.parse import parse_qs, unquote, urlparse
 from beartype import beartype
 from loguru import logger
 from pydantic import BaseModel
-from datetime import datetime
-from itertools import product
 
 from navi_bench.base import BaseMetric, BaseTaskConfig, get_import_path
 from navi_bench.dates import (
@@ -62,6 +60,15 @@ class EbayVerifierResult(BaseModel):
     gt_url: str = ""
     details: dict = {}
 
+# ---------- SYSTEM PARAMETERS TO BE IGNORED-----------
+SYSTEM_PARAMS = {
+    "mag",
+    "rt",
+    "epid",
+    "_trkparms",
+    "_trksid",
+    "hash",
+}
 
 # =====================================================================
 # VERIFIER
@@ -137,6 +144,7 @@ class EbayUrlMatch(BaseMetric):
 # =================================================================
 
     def _urls_match(self, agent_url: str, gt_url: str) -> tuple[bool, dict]:
+        gt_url = gt_url.strip()
         parsed_gt = urlparse(gt_url)
         gt_path = (parsed_gt.path or "").lower()
 
@@ -178,8 +186,9 @@ class EbayUrlMatch(BaseMetric):
 
         # BUYING FORMAT
         for key in ["auction", "buy_it_now"]:
-            if gt[key] is not None and agent[key] != gt[key]:
-                mismatches.append(f"{key} mismatch")
+            if gt[key] is True:
+                if agent[key] is not True:
+                    mismatches.append(f"{key} mismatch")
 
         # CONDITION
         if gt["conditions"]:
@@ -209,14 +218,16 @@ class EbayUrlMatch(BaseMetric):
                 mismatches.append("item_location mismatch")
 
         # SHOW ONLY
-        for key in ["deals", "authorized_seller", "free_returns", "returns_accepted"]:
-            if gt[key] is not None and agent[key] != gt[key]:
-                mismatches.append(f"{key} mismatch")
+        for key in ["deals", "authorized_seller", "free_returns", "returns_accepted", "best_offer", "sale_items",]:
+            if gt[key] is True:
+                if agent[key] is not True:
+                    mismatches.append(f"{key} mismatch")
 
         # DELIVERY
         for key in ["free_shipping", "local_pickup"]:
-            if gt[key] is not None and agent[key] != gt[key]:
-                mismatches.append(f"{key} mismatch")
+            if gt[key] is True:
+                if agent[key] is not True:
+                    mismatches.append(f"{key} mismatch")
 
         # SORT
         if gt["sort"]:
@@ -391,6 +402,9 @@ class EbayUrlMatch(BaseMetric):
             "free_shipping": self._to_bool(self._get_param(query, "LH_FS")),
             "local_pickup": self._to_bool(self._get_param(query, "LH_LPickup")),
 
+            "best_offer": self._to_bool(self._get_param(query, "LH_BO")),
+            "sale_items": self._to_bool(self._get_param(query, "LH_SaleItems")),
+
             "sort": self._get_param(query, "_sop"),
         }
 
@@ -467,35 +481,20 @@ class EbayUrlMatch(BaseMetric):
 
         for key, values in query.items():
 
-            # skip system params
-            if key.startswith("_") or key.startswith("LH_"):
-                continue
-
             if not values:
                 continue
 
-            # decode key (double decode for ebay)
             decoded_key = self._decode_twice(key).lower().strip()
 
-            # decode value
-            decoded_val = self._decode_twice(values[0]).lower()
+            # skip system params
+            if (
+                decoded_key.startswith("_")
+                or decoded_key.startswith("lh_")
+                or decoded_key in SYSTEM_PARAMS
+            ):
+                continue
 
-            # split multi values
-            parts = re.split(r"[|,]", decoded_val)
-
-            clean_values = set()
-
-            for p in parts:
-                p = p.strip()
-
-                if not p:
-                    continue
-
-                # remove negation (!value)
-                if p.startswith("!"):
-                    p = p[1:]
-
-                clean_values.add(p)
+            clean_values = self._parse_multi_value_param(query, key)
 
             if clean_values:
                 aspects[decoded_key] = clean_values
@@ -510,19 +509,21 @@ class EbayUrlMatch(BaseMetric):
         if key in query and query[key]:
             return query[key][0].strip()
         return ""
-
-    @staticmethod
-    def _to_int(value: str):
-        try:
-            return int(value)
-        except:
-            return None
         
     @staticmethod
     def _to_bool(value: str) -> bool | None:
-        if not value:
+        if value is None or value == "":
             return None
-        return value.strip().lower() == "true"
+
+        val = value.strip().lower()
+
+        if val == "1" or val == "true":
+            return True
+
+        if val == "0" or val == "false":
+            return None 
+
+        return None
     
     @staticmethod
     def _to_float(value: str):
@@ -619,10 +620,6 @@ class EbayUrlMatch(BaseMetric):
 
                 if not p:
                     continue
-
-                # normalize: remove leading "!"
-                if p.startswith("!"):
-                    p = p[1:]
 
                 result.add(p)
 
