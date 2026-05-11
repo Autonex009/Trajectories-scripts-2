@@ -242,13 +242,29 @@ class StockxUrlMatch(BaseMetric):
 
             mismatches = []
 
+            # ---------------------------------
+            # Canonical brand check via path
+            # ---------------------------------
             if gt["brand_slug"]:
                 if agent["brand_slug"] != gt["brand_slug"]:
                     mismatches.append(
                         f"brand mismatch: {agent['brand_slug']} vs {gt['brand_slug']}"
                     )
 
-            mismatches.extend(self._match_common_filters(agent, gt))
+            # ---------------------------------
+            # Ignore redundant brand query filter
+            # for /brands/* pages
+            # ---------------------------------
+            agent_common = dict(agent)
+            gt_common = dict(gt)
+
+            agent_common["brand"] = set()
+            gt_common["brand"] = set()
+
+            mismatches.extend(
+                self._match_common_filters(agent_common, gt_common)
+            )
+
             mismatches.extend(self._match_aspects(agent, gt))
 
             if mismatches:
@@ -371,11 +387,10 @@ class StockxUrlMatch(BaseMetric):
 
         result = self._parse_common_filters(query)
 
-        parts = parsed.path.strip("/").split("/")
+        parts = parsed.path.lower().strip("/").split("/")
         result["brand_slug"] = parts[1] if len(parts) > 1 else ""
 
         return result
-    
     # --------------------- BROWSE PARSE--------------------
     def _parse_browse_url(self, url: str) -> dict:
         parsed = urlparse(url)
@@ -383,11 +398,11 @@ class StockxUrlMatch(BaseMetric):
 
         result = self._parse_common_filters(query)
 
-        parts = parsed.path.strip("/").split("/")
+        parts = parsed.path.lower().strip("/").split("/")
         result["browse_segment"] = parts[1] if len(parts) > 1 else ""
 
         return result
-
+    
     # --------------------- ATTRIBUTES PARSER --------------------    
     def _parse_aspects(self, query: dict) -> dict[str, set[str]]:
         aspects = {}
@@ -438,13 +453,6 @@ class StockxUrlMatch(BaseMetric):
         if key in query and query[key]:
             return query[key][0].strip()
         return ""
-
-    @staticmethod
-    def _to_int(value: str):
-        try:
-            return int(value)
-        except:
-            return None
         
     @staticmethod
     def _to_bool(value: str) -> bool | None:
@@ -452,13 +460,6 @@ class StockxUrlMatch(BaseMetric):
             return None
         return value.strip().lower() == "true"
     
-    @staticmethod
-    def _to_float(value: str):
-        try:
-            return float(value)
-        except:
-            return None
-        
     def _parse_price_range(self, value: str):
         if not value:
             return None, None
@@ -471,9 +472,6 @@ class StockxUrlMatch(BaseMetric):
             return float(parts[0]), float(parts[1])
         except:
             return None, None
-
-    def _price_equal(self, a, b, tol=0.01):
-        return abs(a - b) <= tol
 
     def _normalize_query(self, query: str) -> set[str]:
         if not query:
