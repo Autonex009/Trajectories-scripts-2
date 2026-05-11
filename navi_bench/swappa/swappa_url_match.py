@@ -18,7 +18,7 @@ The verifier handles all Swappa URL variations including:
 - Sort order:         ?sort=price_low|price_high|newest|oldest
 - Model filter:       ?model=<model_slug>  (for multi-model pages)
 
-Browser-Verified CLICKABLE Filters (May 2025 on swappa.com):
+Browser-Verified CLICKABLE Filters (May 2026 on swappa.com):
   Left sidebar (desktop):
     Conditions: All Conditions | New | Mint | Good | Fair
     Carriers:   All Carriers | Unlocked | AT&T | T-Mobile | Verizon | ...
@@ -187,6 +187,56 @@ SORT_MAP = {
     "listing created (oldest)": "oldest",
 }
 
+# Color normalization: aliases -> canonical slug
+COLOR_MAP = {
+    # Standard colors (as they appear in Swappa URLs)
+    "black": "black",
+    "blue": "blue",
+    "green": "green",
+    "pink": "pink",
+    "yellow": "yellow",
+    "white": "white",
+    "red": "red",
+    "purple": "purple",
+    "gold": "gold",
+    "silver": "silver",
+    "gray": "gray",
+    "grey": "gray",
+    "natural-titanium": "natural-titanium",
+    "natural_titanium": "natural-titanium",
+    "blue-titanium": "blue-titanium",
+    "blue_titanium": "blue-titanium",
+    "black-titanium": "black-titanium",
+    "black_titanium": "black-titanium",
+    "white-titanium": "white-titanium",
+    "white_titanium": "white-titanium",
+    "desert-titanium": "desert-titanium",
+    "desert_titanium": "desert-titanium",
+    "titanium-black": "black-titanium",
+    "titanium-blue": "blue-titanium",
+    "titanium-natural": "natural-titanium",
+    "titanium-white": "white-titanium",
+    "titanium-desert": "desert-titanium",
+    # Samsung-specific colors
+    "phantom-black": "phantom-black",
+    "phantom_black": "phantom-black",
+    "cream": "cream",
+    "lavender": "lavender",
+    "graphite": "graphite",
+    # Space-prefixed colors
+    "space-black": "space-black",
+    "space_black": "space-black",
+    "space-gray": "space-gray",
+    "space_gray": "space-gray",
+    # Other common aliases
+    "midnight": "midnight",
+    "starlight": "starlight",
+    "coral": "coral",
+    "rose-gold": "rose-gold",
+    "rose_gold": "rose-gold",
+    "rosegold": "rose-gold",
+}
+
 # Storage normalization
 STORAGE_MAP = {
     "128gb": "128gb",
@@ -277,10 +327,11 @@ def _normalize_storage(raw: str) -> str:
 
 
 def _normalize_color(raw: str) -> str:
-    """Normalize color to lowercase string."""
+    """Normalize color to canonical slug via COLOR_MAP, with fallback."""
     if not raw:
         return ""
-    return raw.lower().strip().replace(" ", "-")
+    key = raw.lower().strip().replace(" ", "-")
+    return COLOR_MAP.get(key, key)
 
 
 def _extract_product_slug(path: str) -> str:
@@ -418,7 +469,7 @@ def parse_swappa_url(url: str) -> dict[str, Any]:
 class SwappaUrlMatch(BaseMetric):
     """Comprehensive Swappa URL verifier for product/listing navigation tasks.
 
-    Browser-Verified (May 2025 on swappa.com):
+    Browser-Verified (May 2026 on swappa.com):
     - Product overview:  /buy/{brand}-{model}
     - Listings page:     /listings/{brand}-{model}?filters
     - Category browse:   /buy/{category}
@@ -567,9 +618,7 @@ class SwappaUrlMatch(BaseMetric):
                     )
                     return False, details
                 # Compare slugs: allow /buy/ vs /listings/ equivalence
-                gt_slug = gt["product_slug"].lstrip("buy/").lstrip("listings/")
-                agent_slug = agent["product_slug"].lstrip("buy/").lstrip("listings/")
-                # Normalize: remove leading path prefix
+                # _extract_product_slug already strips the prefix, so compare directly
                 gt_slug = re.sub(r"^(buy|listings)/", "", gt["product_slug"])
                 agent_slug = re.sub(r"^(buy|listings)/", "", agent["product_slug"])
                 if agent_slug != gt_slug:
@@ -731,3 +780,59 @@ def generate_task_config(
         user_metadata=user_metadata,
         eval_config=eval_config,
     )
+
+
+# =============================================================================
+# STANDALONE DEMO
+# =============================================================================
+
+
+if __name__ == "__main__":
+    import json
+
+    from navi_bench.base import DatasetItem, instantiate
+
+    dataset_row = {
+        "task_id": "navi_bench/swappa/product_navigation/0",
+        "task_generation_config_json": json.dumps(
+            {
+                "_target_": "navi_bench.swappa.swappa_url_match.generate_task_config",
+                "url": "https://swappa.com/",
+                "task": (
+                    "Find the Apple iPhone 15 Pro Max on Swappa. Show me the "
+                    "unlocked 256GB listings in mint condition, sorted by "
+                    "lowest price first."
+                ),
+                "location": "New York, NY, United States",
+                "timezone": "America/New_York",
+                "gt_url": [
+                    "https://swappa.com/listings/apple-iphone-15-pro-max"
+                    "?carrier=unlocked&storage=256gb&condition=mint&sort=price_low"
+                ],
+            }
+        ),
+        "env": "real",
+        "domain": "swappa",
+        "l1_category": "e_commerce",
+        "l2_category": "product_navigation",
+        "suggested_split": "train",
+        "suggested_difficulty": "hard",
+    }
+
+    dataset_item = DatasetItem.model_validate(dataset_row)
+    task_config = dataset_item.generate_task_config()
+    evaluator = instantiate(task_config.eval_config)
+
+    print("Loaded dataset item")
+    print("-------------------")
+    print(dataset_item)
+    print()
+
+    print("Generated task config")
+    print("---------------------")
+    print(task_config)
+    print()
+
+    print("Instantiated evaluator")
+    print("----------------------")
+    print(evaluator)

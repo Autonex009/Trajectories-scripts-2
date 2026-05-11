@@ -1,6 +1,6 @@
 """Comprehensive tests for SwappaUrlMatch verifier.
 
-Browser-verified against swappa.com (May 2025).
+Browser-verified against swappa.com (May 2026).
 Tests cover: URL parsing, domain validation, product slug matching,
 carrier/condition/storage/color/sort normalization, full URL comparison,
 async lifecycle, multi-GT URLs, and edge cases.
@@ -147,6 +147,22 @@ class TestNormalizeCarrier:
     def test_empty(self):
         assert _normalize_carrier("") == ""
 
+    def test_at_t_hyphenated(self):
+        assert _normalize_carrier("at-t") == "att"
+
+    def test_consumer_cellular(self):
+        assert _normalize_carrier("consumer-cellular") == "consumer-cellular"
+        assert _normalize_carrier("consumer_cellular") == "consumer-cellular"
+        assert _normalize_carrier("consumercellular") == "consumer-cellular"
+
+    def test_tracfone(self):
+        assert _normalize_carrier("tracfone") == "tracfone"
+        assert _normalize_carrier("trac-fone") == "tracfone"
+
+    def test_red_pocket(self):
+        assert _normalize_carrier("red-pocket") == "red-pocket"
+        assert _normalize_carrier("red_pocket") == "red-pocket"
+
 
 class TestNormalizeCondition:
     """Test condition normalization."""
@@ -179,6 +195,7 @@ class TestNormalizeSort:
         assert _normalize_sort("price_low") == "price_low"
         assert _normalize_sort("price_high") == "price_high"
         assert _normalize_sort("newest") == "newest"
+        assert _normalize_sort("oldest") == "oldest"
 
     def test_aliases(self):
         assert _normalize_sort("cheapest") == "price_low"
@@ -193,6 +210,13 @@ class TestNormalizeSort:
 
     def test_empty(self):
         assert _normalize_sort("") == ""
+
+    def test_oldest_aliases(self):
+        assert _normalize_sort("oldest") == "oldest"
+        assert _normalize_sort("oldest_first") == "oldest"
+        assert _normalize_sort("oldest first") == "oldest"
+        assert _normalize_sort("least_recent") == "oldest"
+        assert _normalize_sort("listing created (oldest)") == "oldest"
 
 
 class TestNormalizeStorage:
@@ -237,6 +261,21 @@ class TestNormalizeColor:
 
     def test_empty(self):
         assert _normalize_color("") == ""
+
+    def test_grey_alias(self):
+        assert _normalize_color("grey") == "gray"
+        assert _normalize_color("gray") == "gray"
+
+    def test_titanium_colors(self):
+        assert _normalize_color("natural-titanium") == "natural-titanium"
+        assert _normalize_color("natural_titanium") == "natural-titanium"
+        assert _normalize_color("titanium-black") == "black-titanium"
+        assert _normalize_color("desert_titanium") == "desert-titanium"
+
+    def test_rose_gold_aliases(self):
+        assert _normalize_color("rose-gold") == "rose-gold"
+        assert _normalize_color("rose_gold") == "rose-gold"
+        assert _normalize_color("rosegold") == "rose-gold"
 
 
 # =============================================================================
