@@ -220,6 +220,77 @@ def _normalize_query_text(text: str) -> str:
     return text
 
 
+# ---- Singular / Plural Normalization (English) ----
+# Words that should NOT be de-pluralized (irregular or ambiguous).
+_STEM_EXCEPTIONS: set[str] = {
+    "this", "his", "its", "is", "was", "has", "yes", "no", "us",
+    "bus", "plus", "gas", "lens", "atlas", "canvas", "bias", "series",
+    "species", "scissors", "glasses", "pants", "jeans", "shorts",
+    "electronics", "gymnastics", "mathematics", "physics", "news",
+    "airpods", "beats", "crocs", "adidas", "converse", "vans",
+    "clothes", "goods", "corps", "chassis", "means", "headquarters",
+}
+
+
+def _stem_word(word: str) -> str:
+    """Reduce an English word to a rough singular stem.
+
+    Applies basic de-pluralization rules. NOT a full NLP stemmer — designed
+    for e-commerce search queries where singular/plural variants are common
+    (e.g., 'watches' → 'watch', 'shoes' → 'shoe', 'batteries' → 'battery').
+
+    Returns the original word if no rule applies or if it's an exception.
+    """
+    if not word or len(word) <= 2:
+        return word
+
+    # Skip known exceptions (brand names, always-plural nouns, etc.)
+    if word in _STEM_EXCEPTIONS:
+        return word
+
+    # Rule 1: -ies → -y  (e.g., "batteries" → "battery", "accessories" → "accessory")
+    #   Guard: only if stem is 2+ chars (avoids "dies" → "dy")
+    if word.endswith("ies") and len(word) > 4:
+        return word[:-3] + "y"
+
+    # Rule 2: -ves → -f / -fe
+    #   -ives → -ife  (e.g., "knives" → "knife", "wives" → "wife")
+    #   other -ves → -f  (e.g., "shelves" → "shelf", "scarves" → "scarf")
+    if word.endswith("ves") and len(word) > 4:
+        if word.endswith("ives"):
+            return word[:-4] + "ife"
+        return word[:-3] + "f"
+
+    # Rule 3: -ses, -xes, -zes, -ches, -shes → remove "es"
+    #   (e.g., "watches" → "watch", "boxes" → "box", "dresses" → "dress")
+    if word.endswith("es") and len(word) > 3:
+        base = word[:-2]
+        if base.endswith(("s", "x", "z", "ch", "sh")):
+            return base
+
+    # Rule 4: -s → remove "s"  (general plural)
+    #   Guard: don't strip from words ending in "ss", "us", "is"
+    #   (e.g., "shoes" → "shoe", "cameras" → "camera")
+    if word.endswith("s") and not word.endswith(("ss", "us", "is")):
+        return word[:-1]
+
+    return word
+
+
+def _stem_keywords(text: str) -> str:
+    """Apply _stem_word to every word in a normalized keyword string.
+
+    Each word is individually stemmed and the results are re-joined.
+    Input should already be lowercase / whitespace-normalized.
+
+    Example: "nike shoes" → "nike shoe"
+             "vintage watches" → "vintage watch"
+    """
+    if not text:
+        return ""
+    return " ".join(_stem_word(w) for w in text.split())
+
+
 def _normalize_sort_order(raw: str) -> str:
     """Normalize sort order to canonical numeric value (1-4)."""
     if not raw:
@@ -549,7 +620,8 @@ class MercariUrlMatch(BaseMetric):
             agent = parse_mercari_url(agent_url)
             gt = parse_mercari_url(gt_url)
 
-            # 1. Search keyword (case-insensitive, whitespace-normalized)
+            # 1. Search keyword (case-insensitive, whitespace-normalized,
+            #    with singular/plural fallback via stemming)
             if gt["keyword"]:
                 if not agent["keyword"]:
                     details["mismatches"].append(
@@ -557,10 +629,16 @@ class MercariUrlMatch(BaseMetric):
                     )
                     return False, details
                 if agent["keyword"] != gt["keyword"]:
-                    details["mismatches"].append(
-                        f"Keyword: '{agent['keyword']}' vs '{gt['keyword']}'"
-                    )
-                    return False, details
+                    # Fallback: compare stemmed versions for plural tolerance
+                    # e.g., "watches" → "watch", "shoes" → "shoe"
+                    agent_stemmed = _stem_keywords(agent["keyword"])
+                    gt_stemmed = _stem_keywords(gt["keyword"])
+                    if agent_stemmed != gt_stemmed:
+                        details["mismatches"].append(
+                            f"Keyword: '{agent['keyword']}' "
+                            f"vs '{gt['keyword']}'"
+                        )
+                        return False, details
 
             # 2. Minimum price (in cents)
             if gt["min_price"] is not None:

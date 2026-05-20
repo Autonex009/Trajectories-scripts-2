@@ -443,7 +443,7 @@ URL comparison. Extra parameters in the agent URL do not cause a mismatch.
 
 | # | Field | Normalization | Comparison | Fail if GT has & Agent missing? |
 | :---: | :--- | :--- | :--- | :---: |
-| 1 | Search keyword | URL-decode, lowercase, collapse whitespace | Case-insensitive string match | ✅ Yes |
+| 1 | Search keyword | URL-decode, lowercase, collapse whitespace, **singular/plural stemming fallback** | Case-insensitive string match (with plural tolerance) | ✅ Yes |
 | 2 | Min price | Parse as integer (cents) | Exact integer match | ✅ Yes |
 | 3 | Max price | Parse as integer (cents) | Exact integer match | ✅ Yes |
 | 4 | Sort order | Alias resolution (see §3) | Exact string match | ✅ Yes |
@@ -461,7 +461,10 @@ URL comparison. Extra parameters in the agent URL do not cause a mismatch.
 1. If ground truth specifies a field and agent **omits** it → **FAIL** (no auto-pass)
 2. If ground truth **omits** a field → agent value is **ignored** (pass)
 3. **No auto-pass loopholes**: every GT-specified field must be present and correct
-4. Keyword matching is **case-insensitive** and **whitespace-normalized**
+4. Keyword matching is **case-insensitive**, **whitespace-normalized**, and **plural-tolerant**
+    - Exact match is tried first; if it fails, both keywords are stemmed
+    - `"watches"` ↔ `"watch"`, `"shoes"` ↔ `"shoe"`, `"batteries"` ↔ `"battery"` all match
+    - Brand names (`nike`, `crocs`, `vans`, `airpods`) and always-plural nouns (`electronics`, `glasses`, `jeans`) are protected from false stemming
 5. Conditions are compared as **sorted sets** — order does not matter
 6. Price values are compared as **raw integers** (cents) — no dollar conversion
 7. First successful match across multi-GT URLs → **score = 1.0** (OR semantics)
