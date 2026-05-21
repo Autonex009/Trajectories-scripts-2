@@ -231,6 +231,35 @@ _STEM_EXCEPTIONS: set[str] = {
     "clothes", "goods", "corps", "chassis", "means", "headquarters",
 }
 
+# Irregular -ves plurals mapped to their singular form.
+# Only these words use the -ves → -f/-fe pattern. All other -ves words
+# (gloves, drives, stoves, etc.) are regular and handled by Rule 4 (-s strip).
+_IRREGULAR_VES: dict[str, str] = {
+    "knives": "knife",
+    "wives": "wife",
+    "lives": "life",
+    "shelves": "shelf",
+    "halves": "half",
+    "scarves": "scarf",
+    "calves": "calf",
+    "loaves": "loaf",
+    "wolves": "wolf",
+    "elves": "elf",
+    "leaves": "leaf",
+    "thieves": "thief",
+}
+
+# Words whose singular ends in -ie. Their plurals (ending in -ies) should
+# NOT be stemmed via -ies → -y. Instead they fall through to Rule 4 (-s strip).
+# e.g., "movies" → "movie" (not "movy"), "cookies" → "cookie" (not "cooky")
+_IE_PLURALS: set[str] = {
+    "movies", "cookies", "beanies", "onesies", "brownies", "selfies",
+    "smoothies", "hoodies", "zombies", "pixies", "birdies", "ponies",
+    "roomies", "foodies", "newbies", "groupies", "goodies", "techies",
+    "undies", "veggies", "wheelies", "bikies", "collies", "duckies",
+    "guppies", "hippies", "yuppies", "magpies", "pies", "ties", "dies",
+    "lies", "vies",
+}
 
 def _stem_word(word: str) -> str:
     """Reduce an English word to a rough singular stem.
@@ -249,17 +278,20 @@ def _stem_word(word: str) -> str:
         return word
 
     # Rule 1: -ies → -y  (e.g., "batteries" → "battery", "accessories" → "accessory")
-    #   Guard: only if stem is 2+ chars (avoids "dies" → "dy")
+    #   Guard: words in _IE_PLURALS are -ie singulars with -s added
+    #   (movie+s, cookie+s) — skip to Rule 4. Only apply -ies → -y
+    #   for true consonant-y → consonant-ies patterns.
     if word.endswith("ies") and len(word) > 4:
-        return word[:-3] + "y"
+        if word not in _IE_PLURALS:
+            return word[:-3] + "y"
 
-    # Rule 2: -ves → -f / -fe
-    #   -ives → -ife  (e.g., "knives" → "knife", "wives" → "wife")
-    #   other -ves → -f  (e.g., "shelves" → "shelf", "scarves" → "scarf")
+    # Rule 2: -ves → -f / -fe  (IRREGULAR plurals only)
+    #   Only a small set of English words use this pattern. All other -ves
+    #   words (gloves, drives, stoves) are regular -ve + s plurals handled
+    #   by Rule 4.
     if word.endswith("ves") and len(word) > 4:
-        if word.endswith("ives"):
-            return word[:-4] + "ife"
-        return word[:-3] + "f"
+        if word in _IRREGULAR_VES:
+            return _IRREGULAR_VES[word]
 
     # Rule 3: -ses, -xes, -zes, -ches, -shes → remove "es"
     #   (e.g., "watches" → "watch", "boxes" → "box", "dresses" → "dress")
