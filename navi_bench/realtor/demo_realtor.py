@@ -53,6 +53,9 @@ class BrowserConfig:
     )
     locale: str = "en-US"
 
+    # Remote WebSocket connection string (Bright Data Scraping Browser)
+    remote_ws_endpoint: str = "wss://brd-customer-hl_32166437-zone-scraping_browser1:ba6nyrmvgpzk@brd.superproxy.io:9222"
+
     # Anti-detection arguments
     launch_args: list = field(default_factory=lambda: [
         "--disable-blink-features=AutomationControlled",
@@ -319,19 +322,29 @@ class BrowserManager:
 
     async def launch(self, playwright) -> tuple:
         """Launch browser with stealth configuration."""
-        self.browser = await playwright.chromium.launch(
-            headless=self.config.headless,
-            args=self.config.launch_args,
-        )
+        if self.config.remote_ws_endpoint:
+            print(f"  [i] Connecting to Bright Data Scraping Browser...")
+            self.browser = await playwright.chromium.connect_over_cdp(self.config.remote_ws_endpoint)
+            # Bright Data usually provides a default context
+            self.context = self.browser.contexts[0] if self.browser.contexts else await self.browser.new_context(
+                viewport={"width": self.config.viewport_width, "height": self.config.viewport_height},
+                user_agent=self.config.user_agent,
+                locale=self.config.locale,
+            )
+        else:
+            self.browser = await playwright.chromium.launch(
+                headless=self.config.headless,
+                args=self.config.launch_args,
+            )
 
-        self.context = await self.browser.new_context(
-            viewport={
-                "width": self.config.viewport_width,
-                "height": self.config.viewport_height,
-            },
-            user_agent=self.config.user_agent,
-            locale=self.config.locale,
-        )
+            self.context = await self.browser.new_context(
+                viewport={
+                    "width": self.config.viewport_width,
+                    "height": self.config.viewport_height,
+                },
+                user_agent=self.config.user_agent,
+                locale=self.config.locale,
+            )
 
         # Anti-detection scripts
         await self.context.add_init_script("""
