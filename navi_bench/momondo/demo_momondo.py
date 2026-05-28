@@ -5,8 +5,12 @@ from dataclasses import dataclass, field
 from playwright.async_api import async_playwright
 from loguru import logger
 
-# Import the Momondo evaluator
-from momondo_info_gathering import MomondoInfoGathering
+# Import the new Momondo evaluator
+from navi_bench.momondo.momondo_info_gathering import MomondoInfoGathering
+
+from navi_bench.momondo.momondo_info_gathering import (
+    generate_task_config_deterministic
+)
 
 @dataclass
 class BrowserConfig:
@@ -30,35 +34,87 @@ class TaskScenario:
     url: str
     task_prompt: str
     queries: list
-    location: str = "United States"
+    values: dict | None = None
+    location: str = "New York, NY, United States"
     timezone: str = "America/New_York"
 
-# Demo Scenarios for US Market (momondo.com)
+
+# Updated Scenarios for Momondo (US Market — USD)
 SCENARIOS: list[TaskScenario] = [
     TaskScenario(
+        task_id="momondo/hotels/la_top3_cheapest_next_thursday",
+        name="Los Angeles Top 3 Cheapest Hotels - Next Thursday",
+        description="Find and summarize the top 3 cheapest hotels in Los Angeles for next Thursday.",
+        url="https://www.momondo.com/",
+        task_prompt=(
+            "Please summarise the top 3 cheapest hotels in Los Angeles on {dateRange}. "
+            "Include their names, star ratings, and prices."
+        ),
+        values={
+            "dateRange": "next Thursday"
+        },
+        queries=[[{
+            "cities": ["los-angeles"]
+        }]]
+    ),
+    TaskScenario(
+        task_id="momondo/hotels/la_4star_under_200",
+        name="Los Angeles 4-Star Hotel Under $200",
+        description="Find a 4-star hotel in Los Angeles under $200 for next Tuesday.",
+        url="https://www.momondo.com/",
+        task_prompt=(
+            "Find a 4-star hotel in Los Angeles for a stay on {dateRange} "
+            "under $200. Respond with the hotel name and price."
+        ),
+        values={
+            "dateRange": "next Tuesday"
+        },
+        queries=[[{
+            "cities": ["los-angeles"],
+            "min_stars": 4,
+            "max_price": 200.0
+        }]]
+    ),
+    TaskScenario(
+        task_id="momondo/hotels/los_angeles_cheapest_next_monday",
+        name="Los Angeles Cheapest Hotel - Next Monday",
+        description="Find the absolute cheapest hotel available in Los Angeles for next Monday.",
+        url="https://www.momondo.com/",
+        task_prompt=(
+            "What is the absolute cheapest hotel available in Los Angeles on {dateRange}? "
+            "Please give me the name and price."
+        ),
+        values={
+            "dateRange": "next Monday"
+        },
+        queries=[[{
+            "cities": ["los-angeles"],
+        }]]
+    ),
+    TaskScenario(
         task_id="momondo/flights/jfk_lax_budget",
-        name="New York to Los Angeles — Under $400",
+        name="New York to Los Angeles - Under $400",
         description="Search for a budget flight between JFK and LAX.",
         url="https://www.momondo.com/",
         task_prompt=(
             "Find a flight from New York (JFK) to Los Angeles (LAX). The ticket must cost less than $400."
         ),
         queries=[[{
-            "origins": ["jfk"], 
+            "origins": ["jfk"],
             "destinations": ["lax"],
             "max_price": 400.0,
         }]]
     ),
     TaskScenario(
         task_id="momondo/flights/ord_mia_direct_united",
-        name="Chicago to Miami — Direct United Airlines",
+        name="Chicago to Miami - Direct United Airlines",
         description="Search specifically for a direct United Airlines flight.",
         url="https://www.momondo.com/",
         task_prompt=(
             "Search for a direct United Airlines flight from Chicago (ORD) to Miami (MIA)."
         ),
         queries=[[{
-            "origins": ["ord"], 
+            "origins": ["ord"],
             "destinations": ["mia"],
             "airlines": ["united"],
             "require_direct": True,
@@ -72,10 +128,10 @@ class ResultReporter:
         print("\n" + "=" * 80)
         print("VERIFICATION RESULT")
         print("=" * 80)
-        
+
         score_pct = result.score * 100
-        status = "✅ PASS" if result.score >= 1.0 else "⚠️ PARTIAL" if result.score > 0 else "❌ FAIL"
-        
+        status = "PASS" if result.score >= 1.0 else "PARTIAL" if result.score > 0 else "FAIL"
+
         print(f"Status:           {status}")
         print(f"Score:            {score_pct:.1f}%")
         print(f"Queries Matched:  {result.n_covered}/{result.n_queries}")
@@ -85,26 +141,56 @@ async def run_scenario(scenario: TaskScenario) -> dict:
     # Initialize the Momondo evaluator
     evaluator = MomondoInfoGathering(queries=scenario.queries)
     reporter = ResultReporter()
-    
-    print(f"\n{'='*60}\nTASK: {scenario.task_prompt}\n{'='*60}")
+
+    task_config = generate_task_config_deterministic(
+        mode="any",
+        task=scenario.task_prompt,
+        queries=scenario.queries,
+        location=scenario.location,
+        timezone=scenario.timezone,
+        url=scenario.url,
+        values=scenario.values,
+    )
+
+    rendered_prompt = task_config.task
+
+    resolved_dates = []
+
+    for alternative_conditions in scenario.queries:
+        for query in alternative_conditions:
+            if query.get("depart_dates"):
+                resolved_dates.extend(query["depart_dates"])
+
+            if query.get("check_in_dates"):
+                resolved_dates.extend(query["check_in_dates"])
+
+            if query.get("pickup_dates"):
+                resolved_dates.extend(query["pickup_dates"])
+
+    resolved_dates = list(set(resolved_dates))
+
+    if resolved_dates:
+        print(f"\n[RESOLVED DATES] {resolved_dates}")
+
+    print(f"\n{'='*60}\nTASK: {rendered_prompt}\n{'='*60}")
     input("Press ENTER to launch browser...")
-    
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=False)
         context = await browser.new_context(locale="en-US", timezone_id=scenario.timezone)
-        
+
         # Critical for Momondo/Kayak evasion
         await context.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
         """)
-        
+
         page = await context.new_page()
         evaluator.attach_to_context(context)
-        
+
         await page.goto(scenario.url, timeout=60000, wait_until="domcontentloaded")
-            
+
         await asyncio.to_thread(input, "\nNavigate and press ENTER when you've completed the task... ")
-        
+
         try:
             # Playwright keeps track of all open tabs. context.pages[-1] grabs the most recent/active one!
             active_page = context.pages[-1]
@@ -112,12 +198,12 @@ async def run_scenario(scenario: TaskScenario) -> dict:
             await evaluator.update(page=active_page)
         except Exception as e:
             print(f"\n[ERROR] Failed to scrape active page: {e}")
-            
+
         result = await evaluator.compute()
         await context.close()
         await browser.close()
-    
-    reporter.print_result(result, evaluator, scenario) 
+
+    reporter.print_result(result, evaluator, scenario)
     return result
 
 async def main():
