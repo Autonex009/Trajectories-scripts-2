@@ -111,6 +111,121 @@ SCENARIOS: list[TaskScenario] = [
     ),
 
     TaskScenario(
+        task_id="ticketmaster/theater/lion_king/cincinnati_aronoff_center/101",
+        name="The Lion King at Aronoff Center - Cincinnati Fridays",
+        description="Find available tickets for The Lion King touring event at Aronoff Center-Procter & Gamble Hall in Cincinnati, OH for Fridays in next month.",
+        url="https://www.ticketmaster.com/",
+        task_prompt=(
+            "Search for 'The Lion King' touring event by Disney. Find the "
+            "event happening in Cincinnati, OH at the Aronoff Center-Procter "
+            "& Gamble Hall and look for available tickets on {dateRange}"
+        ),
+        queries=[[{
+            "event_names": ["the lion king (touring)"],
+            "cities": ["cincinnati"],
+            "venues": ["aronoff center-procter & gamble hall"],
+            "require_available": True,
+        }]],
+        values={"dateRange": "Fridays in next month"},
+        location="United States",
+        timezone="America/Boise",
+        category="theater",
+        tags=["theater", "the_lion_king", "cincinnati", "aronoff_center", "dynamic_dates"],
+    ),
+
+    TaskScenario(
+        task_id="ticketmaster/music/backstreet_boys/sphere_las_vegas/101",
+        name="Backstreet Boys at Sphere - Las Vegas Fridays",
+        description="Find available Backstreet Boys: Into The Millennium concert tickets at the Sphere in Las Vegas for Fridays in next month.",
+        url="https://www.ticketmaster.com/",
+        task_prompt=(
+            "Search for the 'Backstreet Boys: Into The Millennium' concert "
+            "at the Sphere in Las Vegas. Find tickets for {dateRange}. "
+            "Look for the available options."
+        ),
+        queries=[[{
+            "event_names": ["backstreet boys: into the millennium"],
+            "cities": ["las vegas"],
+            "venues": ["sphere"],
+            "require_available": True,
+        }]],
+        values={"dateRange": "Fridays in next month"},
+        location="United States",
+        timezone="America/Los_Angeles",
+        category="music",
+        tags=["music", "backstreet_boys", "sphere", "las_vegas", "dynamic_dates"],
+    ),
+
+    TaskScenario(
+        task_id="ticketmaster/music/ariana_grande/los_angeles_budget_900/101",
+        name="Ariana Grande - Los Angeles Under $900",
+        description="Find Ariana Grande tickets in Los Angeles, CA for Fridays in next month with a maximum price of $900.",
+        url="https://www.ticketmaster.com/",
+        task_prompt=(
+            "Search for Ariana Grande in Los Angeles, CA on {dateRange}. "
+            "Find tickets priced for maximum $900."
+        ),
+        queries=[[{
+            "event_names": ["ariana grande"],
+            "cities": ["los angeles"],
+            "max_price": 900.0,
+            "require_available": True,
+        }]],
+        values={"dateRange": "Fridays in next month"},
+        location="United States",
+        timezone="America/Los_Angeles",
+        category="music",
+        tags=["music", "ariana_grande", "los_angeles", "budget_under_900", "dynamic_dates"],
+    ),
+
+    TaskScenario(
+        task_id="ticketmaster/theater/wicked_ny/two_tickets_budget_range/101",
+        name="Wicked (NY) - 2 Tickets Between $200 and $400",
+        description="Find exactly 2 Wicked (NY) tickets for Saturdays in next month priced between $200 and $400.",
+        url="https://www.ticketmaster.com/",
+        task_prompt=(
+            "Search for the Wicked (NY) on {dateRange} for exactly 2 "
+            "tickets priced between minimum $200 and maximum $400."
+        ),
+        queries=[[{
+            "event_names": ["wicked (ny)"],
+            "ticket_quantities": [2],
+            "min_price": 200.0,
+            "max_price": 400.0,
+            "require_available": True,
+        }]],
+        values={"dateRange": "Saturdays in next month"},
+        location="United States",
+        timezone="America/Los_Angeles",
+        category="theater",
+        tags=["theater", "wicked_ny", "two_tickets", "price_range", "dynamic_dates"],
+    ),
+
+    TaskScenario(
+        task_id="ticketmaster/music/charlie_puth/three_tickets_price_range/101",
+        name="Charlie Puth - 3 Tickets Between $80 and $180",
+        description="Find exactly 3 tickets for Charlie Puth: Whatever's Clever! World Tour on Fridays in next month priced between $80 and $180.",
+        url="https://www.ticketmaster.com/",
+        task_prompt=(
+            "Search for 'Charlie Puth: Whatever's Clever! World Tour' on "
+            "{dateRange}. Select exactly 3 tickets priced between minimum "
+            "$80 and maximum $180."
+        ),
+        queries=[[{
+            "event_names": ["charlie puth: whatever's clever! world tour"],
+            "ticket_quantities": [3],
+            "min_price": 80.0,
+            "max_price": 180.0,
+            "require_available": True,
+        }]],
+        values={"dateRange": "Fridays in next month"},
+        location="United States",
+        timezone="America/New_York",
+        category="music",
+        tags=["music", "charlie_puth", "three_tickets", "price_range", "dynamic_dates"],
+    ),
+
+    TaskScenario(
         task_id="ticketmaster/concerts/charlie_puth/row_A_fridays_next_month",
         name="Charlie Puth Row A Tickets - Fridays Next Month",
         description="Find available Row A tickets for the 'Charlie Puth: Whatever's Clever! World Tour' on Fridays next month.",
