@@ -37,7 +37,16 @@ SCENARIOS = [
         url="https://www.rome2rio.com/",
         task_prompt="Find the cheapest route under ₹3000.",
         queries=[[{"max_price": 3000}]]
+    ),
+        TaskScenario(
+        task_id="del_nyc_train_duration_bracket",
+        name="New Delhi to New York - Train segment (23-24h)",
+        description="",
+        url="https://www.rome2rio.com/",
+        task_prompt="I'm looking for routes from New Delhi to New York that involve a train segment. Tell me info about the top listing where the travel time is strictly between 23 hours (1380 mins) and 24 hours (1440 mins).",
+        queries=[[{"origins": ["new delhi"], "destinations": ["new york"], "modes": ["train"], "min_duration": 1380, "max_duration": 1440}]]
     )
+    
 ]
 
 
@@ -63,7 +72,7 @@ class ResultReporter:
             print("\nSCRAPED ROUTES:")
             for i, info in enumerate(evaluator._infos, 1):
                 mode     = info.get("mode") or info.get("name") or "?"
-                price    = f"₹{info.get('min_price')}" if info.get("min_price") is not None else "N/A"
+                price    = f"{info.get('min_price')}" if info.get("min_price") is not None else "N/A"
                 duration = f"{info.get('duration')} min" if info.get("duration") is not None else "N/A"
 
                 # Check which queries this route satisfies
@@ -86,8 +95,8 @@ class ResultReporter:
                         reqs = []
                         if "max_duration" in q: reqs.append(f"duration ≤ {q['max_duration']} min")
                         if "min_duration" in q: reqs.append(f"duration ≥ {q['min_duration']} min")
-                        if "max_price"    in q: reqs.append(f"price ≤ ₹{q['max_price']}")
-                        if "min_price"   in q: reqs.append(f"price ≥ ₹{q['min_price']}")
+                        if "max_price"    in q: reqs.append(f"price ≤ {q['max_price']}")
+                        if "min_price"   in q: reqs.append(f"price ≥ {q['min_price']}")
                         if "modes"       in q: reqs.append(f"mode in {q['modes']}")
                         print(f"  Query {qi}: {', '.join(reqs) or 'no constraints'}")
         print("=" * 80)
