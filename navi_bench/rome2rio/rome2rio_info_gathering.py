@@ -87,7 +87,7 @@ class Rome2RioInfoGathering(BaseMetric):
                     print(f"\n[SCRAPED {len(new_data)} NEW ITEMS] -> {page.url}")
 
                     for i, r in enumerate(new_data[:10], 1):
-                        price_display = f"₹{r.get('min_price')}" if r.get('min_price') is not None else "N/A"
+                        price_display = f"{r.get('min_price')}" if r.get('min_price') is not None else "N/A"
                         duration_display = f"{r.get('duration')} min" if r.get('duration') is not None else "N/A"
                         
                         if r.get("pageType") == "hotels":
@@ -143,7 +143,7 @@ class Rome2RioInfoGathering(BaseMetric):
                 return False
 
         if "min_price" in query:
-            # Use max_price from the scraped range so a route like ₹30k–₹45k
+            # Use max_price from the scraped range so a route like  30k– 45k
             # correctly satisfies min_price: 33000 (some options exceed the floor).
             price = info.get("max_price")
             if price is None or price < query["min_price"]:
