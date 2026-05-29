@@ -110,6 +110,7 @@ class InfoDict(TypedDict, total=False):
     filterQuantity: int
     filterMinPrice: float
     filterMaxPrice: float
+    floorPrice: float
 
     filterTicketTypes: list[str]  # NEW
     filterADA: bool               # NEW
@@ -429,12 +430,14 @@ class TicketmasterInfoGathering(BaseMetric):
     @classmethod
     def _check_multi_candidate_query(
         cls, query: MultiCandidateQuery, info: InfoDict, evidences: list[InfoDict],
-        event_contexts: dict, page_base_url: str | None = None
+        event_contexts: dict | None = None, page_base_url: str | None = None
     ) -> bool:
         """Check TM-specific query constraints against the scraped InfoDict."""
         
         info_url = (info.get("url") or "").split("?")[0]
         _empty_ctx = {"cities": set(), "venues": set(), "categories": set()}
+        if event_contexts is None:
+            event_contexts = {}
         # Look up context by the info's own URL first, then fall back to the page-level URL
         context = event_contexts.get(info_url, _empty_ctx)
         if context is _empty_ctx and page_base_url:
@@ -518,19 +521,13 @@ class TicketmasterInfoGathering(BaseMetric):
         # 3. PRICE & CURRENCY CONSTRAINTS
         # Price can come from: individual ticket price, filter sidebar price,
         # or LD+JSON floorPrice (schema.org lowPrice).
-        effective_price = (
-            info.get("price")
-            or info.get("filterMaxPrice")
-            or info.get("filterMinPrice")
-            or info.get("floorPrice")
-        )
         if max_price := query.get("max_price"):
             eval_max_price = info.get("price") or info.get("filterMaxPrice") or info.get("floorPrice")
             if eval_max_price is None or eval_max_price > max_price:
                 return False
                 
         if min_price := query.get("min_price"):
-            eval_min_price = info.get("price") or info.get("filterMinPrice") or info.get("floorPrice")
+            eval_min_price = info.get("price") or info.get("filterMinPrice")
             if eval_min_price is None or eval_min_price < min_price:
                 return False
                 
