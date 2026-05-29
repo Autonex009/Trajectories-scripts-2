@@ -156,6 +156,7 @@ class KayakInfoGathering(BaseMetric):
         unique_infos = []
         seen = set()
         for info in all_frame_infos:
+            info["url"] = page.url  # Ensure URL is included for better traceability
             ptype = info.get("pageType")
             if ptype == "flight_results":
                 key = f"flight-{info.get('airline')}-{info.get('departTime')}-{info.get('price')}"
@@ -216,7 +217,10 @@ class KayakInfoGathering(BaseMetric):
                 elif ptype == "car_results":
                     name = item.get("title", "Unknown")
                     provider = item.get("provider", "Unknown")
-                    print(f"  {i}. {name} | {provider} | ${price}", flush=True)
+                    passengers=item.get("passengers")
+                    pickup = item.get("pickUpLocation", "Unknown")
+                    pickup_date = item.get("pickUpDate", "Unknown")
+                    print(f"  {i}. {name} | {provider} | {passengers} passengers | {pickup} | {pickup_date} | ${price}", flush=True)
 
         page_type = infos[0].get("pageType", "unknown") if infos else "unknown"
         anti_bot = infos[0].get("antiBotStatus", "unknown") if infos else "unknown"
@@ -234,6 +238,13 @@ class KayakInfoGathering(BaseMetric):
 
     async def compute(self) -> FinalResult:
         for page_visit in reversed(self._navigation_stack):
+
+            # print(
+            #     "\nDEBUG PAGE:",
+            #     page_visit["page_type"],
+            #     page_visit["anti_bot"],
+            #     len(page_visit["infos"])
+            # )
             if page_visit["anti_bot"] != "clear":
                 continue
                 
@@ -289,21 +300,102 @@ class KayakInfoGathering(BaseMetric):
             max_price = query["max_price"]
             eval_max_price = info.get("price") or info.get("filterMaxPrice")
             if eval_max_price is None or eval_max_price > max_price: return False
-        
-        # --- BUG FIX 1: Min Price ---
+       
+        # Min Price
         if "min_price" in query and query["min_price"] is not None:
-            min_price = query["min_price"]
-            # For min price, we strictly need the actual card price to confirm it exceeds the floor
-            eval_price = info.get("price")
-            if eval_price is None or eval_price < min_price: return False
+                min_price = query["min_price"]
+             
+                eval_price = info.get("price")
+                # Normalize string prices like "$1,221"
+                if isinstance(eval_price, str):
+                    cleaned = re.sub(r"[^\d.]", "", eval_price)
+                    eval_price = float(cleaned) if cleaned else None
+            
+                if eval_price is None or eval_price < min_price:
+                    return False
 
-        # --- BUG FIX 2: Cabin Classes ---
         if q_cabin_classes := query.get("cabin_classes"):
-            # Check the specific cabinClass field, falling back to the raw 'info' text dump just in case
-            card_info = (info.get("cabinClass") or info.get("info") or "").lower()
-            if not any(c.lower() in card_info for c in q_cabin_classes):
-                return False
 
+            card_info = (
+                info.get("cabinClass")
+                or info.get("info")
+                or ""
+            ).lower()
+
+            if not card_info:
+
+                page_url = (
+                    info.get("url")
+                    or ""
+                ).lower()
+
+                if "premium" in page_url:
+
+                    card_info = "premium"
+
+                elif "business" in page_url:
+
+                    card_info = "business"
+
+                elif "first" in page_url:
+
+                    card_info = "first"
+
+                else:
+
+                    return False
+
+
+            normalized_queries = []
+
+            for c in q_cabin_classes:
+
+                c = c.lower()
+
+                normalized_queries.append(c)
+
+                if c == "premium economy":
+                    normalized_queries.append("premium")
+
+                elif c == "business class":
+                    normalized_queries.append("business")
+
+                elif c == "first class":
+                    normalized_queries.append("first")
+
+
+            card_tokens = set(
+                re.findall(
+                    r"[a-z]+",
+                    card_info.lower()
+                )
+            )
+
+            matched = False
+
+            for nq in normalized_queries:
+
+                nq_tokens = set(
+                    re.findall(
+                        r"[a-z]+",
+                        nq.lower()
+                    )
+                )
+
+                if nq_tokens.issubset(card_tokens): 
+                    matched = True
+                    break
+                    
+                elif (nq == "premium economy" and "premium" in card_tokens):
+                
+                    matched = True
+                    break
+
+
+            if not matched:
+
+                return False 
+        
         # 6. Direct Flights Only
         if query.get("require_direct") is True:
             raw_stops = info.get("stops")
@@ -364,7 +456,12 @@ class KayakInfoGathering(BaseMetric):
         # --- NEW: CAR CHECKS ---
         if q_pickup := query.get("pickup_locations"):
             info_pickup = (info.get("pickUpLocation") or "").lower()
-            if not any(p.lower() in info_pickup for p in q_pickup): return False
+
+            if not info_pickup:
+                return False
+
+            if not any(p.lower() in info_pickup for p in q_pickup):
+                return False
             
         if "min_passengers" in query and query["min_passengers"] is not None:
             passengers = info.get("passengers")
@@ -376,7 +473,13 @@ class KayakInfoGathering(BaseMetric):
             
         # Car Pickup Dates
         if q_pickup_dates := query.get("pickup_dates"):
-            if info.get("pickUpDate") not in q_pickup_dates: return False
+            info_pickup_date = info.get("pickUpDate")
+
+            if not info_pickup_date:
+                return False
+
+            if info_pickup_date not in q_pickup_dates:
+                return False
 
         return True
 
@@ -410,11 +513,35 @@ def generate_task_config_deterministic(
             if resolved_iso_dates:
                 for alternative_conditions in queries:
                     for query in alternative_conditions:
-                        # Inject into all Kayak domain date fields so it works for Flights, Hotels, and Cars
-                        query["depart_dates"] = resolved_iso_dates
-                        query["check_in_dates"] = resolved_iso_dates
-                        query["pickup_dates"] = resolved_iso_dates
-                        
+
+                        # FLIGHT TASKS
+                        if (
+                            "origins" in query
+                            or "destinations" in query
+                            or "airlines" in query
+                            or "require_direct" in query
+                            or "cabin_classes" in query
+                        ):
+                            query["depart_dates"] = resolved_iso_dates
+
+                        # HOTEL TASKS
+                        elif (
+                            "cities" in query
+                            or "min_stars" in query
+                            or "min_score" in query
+                            or "require_freebies" in query
+                        ):
+                            query["check_in_dates"] = resolved_iso_dates
+
+                        # CAR TASKS
+                        elif (
+                            "pickup_locations" in query
+                            or "car_types" in query
+                            or "min_passengers" in query
+                        ):
+                            query["pickup_dates"] = resolved_iso_dates
+            
+            
     eval_config = {
         "_target_": get_import_path(KayakInfoGathering),
         "queries": queries
