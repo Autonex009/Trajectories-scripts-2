@@ -988,8 +988,251 @@ SCENARIOS: list[TaskScenario] = [
         location="United States",
         timezone="America/Chicago",
     ),
-
-
+    TaskScenario(
+        task_id="goat/apparel/t-shirts/women/1",
+        name="Browse Women's T-Shirts in Size S with White and Red Colors",
+        task=(
+            "Search for t-shirts and select gender as women make sure they are "
+            "women's top in size S. I'm drawn to a soft but vibrant color palette "
+            "with shades like white and red."
+        ),
+        url="https://www.goat.com/",
+        gt_url=[
+            (
+                "http://goat.com/apparel/tops/t-shirts"
+                "?pageSlug=apparel"
+                "&taxonomies=tops%2Ct-shirts"
+                "&pageNumber=1"
+                "&genders=women"
+                "&sizes=universal_tops_women_S"
+                "&colors=white%2Cred"
+            ),
+            (
+                "https://www.goat.com/search"
+                "?query=t-shirts"
+                "&pageNumber=1"
+                "&genders=women"
+                "&sizes=universal_tops_women_S"
+                "&colors=white%2Cred"
+            ),
+        ],
+        location="United States",
+        timezone="America/Chicago",
+    ),
+    TaskScenario(
+        task_id="goat/apparel/swimwear/youth/1",
+        name="Browse Youth Swimwear Sorted High to Low",
+        task=(
+            "I have been looking to get my son ready for the summer season and want "
+            "to find some youth swimwear for our upcoming vacation. Navigate to the "
+            "Apparel section under categories and select the Swimwear category. I am "
+            "looking for youth sizing in gender and want to see the most stylish "
+            "options from top-tier streetwear and luxury labels. Sort the results by "
+            "price high to low so I can see which patterns and brands worth for kids "
+            "swimwear."
+        ),
+        url="https://www.goat.com/",
+        gt_url=[
+            (
+                "https://www.goat.com/apparel"
+                "?pageNumber=1"
+                "&genders=youth"
+                "&sortType=price_high_low"
+                "&categories=Apparel"
+                "&types=%2CSwimwear"
+            ),
+            (
+                "https://www.goat.com/search"
+                "?query=youth+swimwear"
+                "&pageNumber=1"
+                "&sortType=price_high_low"
+            ),
+            (
+                "https://www.goat.com/search"
+                "?pageNumber=1"
+                "&categories=Apparel"
+                "&types=%2CSwimwear"
+                "&sortType=price_high_low"
+            ),
+        ],
+        location="United States",
+        timezone="America/Chicago",
+    ),
+    TaskScenario(
+        task_id="goat/brand/supreme/swimwear/1",
+        name="Browse New Supreme Swimwear with Instant Shipping Sorted High to Low",
+        task=(
+            "I have been looking to buy swimwear, but I'm only interested in items "
+            "that can be shipped out immediately. Navigate to the Supreme brand page "
+            "under Featured Brands and filter for swimwear within the apparel section. "
+            "I only want to see new conditioned pieces and specifically want to browse "
+            "Instant ship options to avoid any processing delays. Sort the results from "
+            "highest price to lowest so I can explore the most premium neck gaiters first."
+        ),
+        url="https://www.goat.com/",
+        gt_url=[
+            (
+                "https://www.goat.com/brand/supreme"
+                "?slug=supreme"
+                "&sortType=price_high_low"
+                "&pageNumber=1"
+                "&types=%2Cswimwear"
+                "&categories=apparel"
+                "&conditions=new_no_defects"
+                "&instantShip=true"
+            ),
+            (
+                "https://www.goat.com/search"
+                "?query=swimwear"
+                "&pageNumber=1"
+                "&sortType=price_high_low"
+                "&conditions=new_no_defects"
+                "&instantShip=true"
+                "&brands=Supreme"
+            ),
+            (
+                "https://www.goat.com/search"
+                "?pageNumber=1"
+                "&categories=Apparel"
+                "&types=%2CSwimwear"
+                "&sortType=price_high_low"
+                "&conditions=new_no_defects"
+                "&instantShip=true"
+            ),
+        ],
+        location="United States",
+        timezone="America/Chicago",
+    ),
+    TaskScenario(
+        task_id="goat/brand/air-jordan/sneakers/1",
+        name="Browse Men's New Air Jordan Sneakers with Instant Shipping Sorted Low to High",
+        task=(
+            "I want to grab a pair of air jordan sneakers. Navigate to the Air Jordan "
+            "brand page under Featured Brands and filter for mens. I only want to see "
+            "new conditioned pairs. To ensure I get them as quickly as possible, "
+            "specifically filter for Instant ship options. Sort the results by lowest "
+            "to highest pricing so that I can see budget-friendly options first."
+        ),
+        url="https://www.goat.com/",
+        gt_url=[
+            (
+                "https://www.goat.com/brand/air-jordan"
+                "?productTypes=sneakers"
+                "&categories=footwear"
+                "&sortType=price_low_high"
+                "&query="
+                "&slug=air-jordan"
+                "&genders=men"
+                "&conditions=new_no_defects"
+                "&instantShip=true"
+            ),
+            (
+                "https://www.goat.com/search"
+                "?productTypes=sneakers"
+                "&sortType=price_low_high"
+                "&query=air+jordan+sneakers"
+                "&genders=men"
+                "&conditions=new_no_defects"
+                "&instantShip=true"
+            ),
+            (
+                "https://www.goat.com/search"
+                "?pageNumber=1"
+                "&brands=Air+Jordan"
+                "&sortType=price_low_high"
+                "&genders=men"
+                "&conditions=new_no_defects"
+                "&instantShip=true"
+            ),
+        ],
+        location="United States",
+        timezone="America/Chicago",
+    ),
+    TaskScenario(
+        task_id="goat/brand/new-balance/sandals/1",
+        name="Browse Men's New Balance Sandals Sorted Low to High",
+        task=(
+            "I have been looking for some new balance sandals. Navigate to the New "
+            "Balance brand page under Brands and filter for Sandals within the "
+            "Footwear section. Select gender as men and I want items in black, "
+            "brown, white, and blue. Sort the results by price low to high so I "
+            "can see the affordable slides currently available."
+        ),
+        url="https://www.goat.com/",
+        gt_url=[
+            (
+                "https://www.goat.com/brand/new-balance"
+                "?pageNumber=1"
+                "&genders=men"
+                "&colors=black%2Cbrown%2Cwhite%2Cblue"
+                "&sortType=price_low_high"
+                "&categories=Footwear"
+                "&types=%2CSandals"
+            ),
+            (
+                "https://www.goat.com/search"
+                "?query=new+balance+sandals"
+                "&sortType=price_low_high"
+                "&genders=men"
+                "&colors=black%2Cbrown%2Cwhite%2Cblue"
+            ),
+            (
+                "https://www.goat.com/search"
+                "?pageNumber=1"
+                "&brands=New+Balance"
+                "&types=%2CSandals"
+                "&categories=Footwear"
+                "&genders=men"
+                "&colors=black%2Cblue%2Cbrown%2Cwhite"
+                "&sortType=price_low_high"
+            ),
+        ],
+        location="United States",
+        timezone="America/Chicago",
+    ),
+    TaskScenario(
+        task_id="goat/brand/supreme/sweatshirts/1",
+        name="Browse Men's Supreme Sweatshirts in Selected Colors Sorted Low to High",
+        task=(
+            "I have been looking to buy sweatshirts. Navigate to the Supreme brand "
+            "page and filter for Sweatshirts within the Tops section. I am looking "
+            "for mens sizing and want to see a specific range of colors, so please "
+            "filter for items in red, green, blue, or tan. Sort the results from "
+            "lowest price to highest so I can find the best value on products."
+        ),
+        url="https://www.goat.com/",
+        gt_url=[
+            (
+                "https://www.goat.com/brand/supreme"
+                "?sortType=price_low_high"
+                "&pageNumber=1"
+                "&categories=Apparel"
+                "&types=%2CTops"
+                "&activities=%2CSweatshirts"
+                "&genders=men"
+                "&colors=red%2Cgreen%2Cblue%2Ctan"
+            ),
+            (
+                "https://www.goat.com/search"
+                "?query=sweatshirts"
+                "&genders=men"
+                "&colors=red%2Cgreen%2Cblue%2Ctan"
+                "&brands=Supreme"
+            ),
+            (
+                "https://www.goat.com/search"
+                "?pageNumber=1"
+                "&brands=Supreme"
+                "&genders=men"
+                "&colors=red%2Cgreen%2Cblue%2Ctan"
+                "&categories=Apparel"
+                "&types=%2CTops"
+                "&activities=%2CSweatshirts"
+            ),
+        ],
+        location="United States",
+        timezone="America/Chicago",
+    ),
 ]
 
 
