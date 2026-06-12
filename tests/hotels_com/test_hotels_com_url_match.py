@@ -678,3 +678,299 @@ class TestRegionalDomains:
         )
         result = await v.compute()
         assert result.score == 1.0
+
+class TestNewlyAddedFilters:
+
+    def test_room_views_parsed(self):
+        url = (
+            f"{BASE}?room_views_group=water_room_view"
+            "&room_views_group=marina_room_view"
+        )
+
+        r = parse_hotels_com_url(url)
+
+        assert r["room_views"] == [
+            "MARINA_ROOM_VIEW",
+            "WATER_ROOM_VIEW",
+        ]
+    
+    def test_room_amenities_parsed(self):
+        url = (
+            f"{BASE}?room_amenities_group=ra_pool"
+            "&room_amenities_group=ra_pets"
+            "&room_amenities_group=ra_kitchen_kitchenette"
+        )
+
+        r = parse_hotels_com_url(url)
+
+        assert r["room_amenities"] == [
+            "RA_KITCHEN_KITCHENETTE",
+            "RA_PETS",
+            "RA_POOL",
+        ]
+    
+    def test_accessibility_parsed(self):
+        url = (
+            f"{BASE}?accessibility=ELEVATOR"
+            "&accessibility=ROLL_IN_SHOWER"
+        )
+
+        r = parse_hotels_com_url(url)
+
+        assert r["accessibility"] == [
+            "ELEVATOR",
+            "ROLL_IN_SHOWER",
+        ]
+    
+    def test_meal_plan_parsed(self):
+        url = (
+            f"{BASE}?mealPlan=FULL_BOARD"
+            "&mealPlan=HALF_BOARD"
+        )
+
+        r = parse_hotels_com_url(url)
+
+        assert r["meal_plans"] == [
+            "FULL_BOARD",
+            "HALF_BOARD",
+        ]
+
+class TestRoomViewsFilter:
+
+    def test_room_views_match(self):
+        gt = (
+            f"{BASE}?room_views_group=water_room_view"
+            "&room_views_group=marina_room_view"
+        )
+
+        agent = (
+            f"{BASE}?room_views_group=marina_room_view"
+            "&room_views_group=water_room_view"
+        )
+
+        match, _ = _match(agent, gt)
+        assert match is True
+
+    def test_room_views_fail(self):
+        gt = (
+            f"{BASE}?room_views_group=water_room_view"
+            "&room_views_group=marina_room_view"
+        )
+
+        agent = (
+            f"{BASE}?room_views_group=water_room_view"
+        )
+
+        match, _ = _match(agent, gt)
+        assert match is False
+
+class TestQueryParameters:
+
+    def test_guest_rating_parsed(self):
+        url = f"{BASE}?guestRating=40"
+
+        r = parse_hotels_com_url(url)
+
+        assert r["guest_rating"] == "40"
+    
+    def test_star_rating_parsed(self):
+        url = (
+            f"{BASE}?star=40"
+            "&star=30"
+        )
+
+        r = parse_hotels_com_url(url)
+
+        assert r["star_rating"] == ["30", "40"]
+    
+    def test_star_rating_match(self):
+        gt = (
+            f"{BASE}?star=40"
+            "&star=30"
+        )
+
+        agent = (
+            f"{BASE}?star=30"
+            "&star=40"
+        )
+
+        match, _ = _match(agent, gt)
+
+        assert match is True
+    
+    def test_star_rating_fail(self):
+        gt = (
+            f"{BASE}?star=40"
+            "&star=30"
+        )
+
+        agent = (
+            f"{BASE}?star=40"
+        )
+
+        match, _ = _match(agent, gt)
+
+        assert match is False
+
+class TestPriceRangeFilter:
+
+    def test_price_range_both(self):
+        url = (
+            f"{BASE}"
+            "?nightly_price=256"
+            "&nightly_price=462"
+        )
+
+        r = parse_hotels_com_url(url)
+
+        assert r["price_min"] == 256
+        assert r["price_max"] == 462
+    
+    def test_price_range_min_only(self):
+        url = (
+            f"{BASE}"
+            "?nightly_price=123"
+            "&nightly_price=-2"
+        )
+
+        r = parse_hotels_com_url(url)
+
+        assert r["price_min"] == 123
+        assert r["price_max"] is None
+
+    def test_price_range_max_only(self):
+        url = (
+            f"{BASE}"
+            "?nightly_price=-3"
+            "&nightly_price=462"
+        )
+
+        r = parse_hotels_com_url(url)
+
+        assert r["price_min"] is None
+        assert r["price_max"] == 462
+    
+    def test_price_range_match(self):
+        gt_url = (
+            f"{BASE}"
+            "?nightly_price=256"
+            "&nightly_price=462"
+        )
+
+        agent_url = (
+            f"{BASE}"
+            "?nightly_price=256"
+            "&nightly_price=462"
+        )
+
+        verifier = HotelsComUrlMatch(gt_url)
+
+        match, details = verifier._urls_match(agent_url, gt_url)
+
+        assert match is True
+        assert details["mismatches"] == []
+    
+    def test_price_range_min_fail(self):
+        gt_url = (
+            f"{BASE}"
+            "?nightly_price=256"
+            "&nightly_price=462"
+        )
+
+        agent_url = (
+            f"{BASE}"
+            "?nightly_price=200"
+            "&nightly_price=462"
+        )
+
+        verifier = HotelsComUrlMatch(gt_url)
+
+        match, details = verifier._urls_match(agent_url, gt_url)
+
+        assert match is False
+        assert any(
+            "Price min" in mismatch
+            for mismatch in details["mismatches"]
+        )
+    
+    def test_price_range_max_fail(self):
+        gt_url = (
+            f"{BASE}"
+            "?nightly_price=256"
+            "&nightly_price=462"
+        )
+
+        agent_url = (
+            f"{BASE}"
+            "?nightly_price=256"
+            "&nightly_price=500"
+        )
+
+        verifier = HotelsComUrlMatch(gt_url)
+
+        match, details = verifier._urls_match(agent_url, gt_url)
+
+        assert match is False
+        assert any(
+            "Price max" in mismatch
+            for mismatch in details["mismatches"]
+        )
+    
+    def test_price_range_min_only_match(self):
+        gt_url = (
+            f"{BASE}"
+            "?nightly_price=123"
+            "&nightly_price=-2"
+        )
+
+        agent_url = (
+            f"{BASE}"
+            "?nightly_price=123"
+            "&nightly_price=-2"
+        )
+
+        verifier = HotelsComUrlMatch(gt_url)
+
+        match, _ = verifier._urls_match(agent_url, gt_url)
+
+        assert match is True
+    
+    def test_price_range_max_only_match(self):
+        gt_url = (
+            f"{BASE}"
+            "?nightly_price=-3"
+            "&nightly_price=462"
+        )
+
+        agent_url = (
+            f"{BASE}"
+            "?nightly_price=-3"
+            "&nightly_price=462"
+        )
+
+        verifier = HotelsComUrlMatch(gt_url)
+
+        match, _ = verifier._urls_match(agent_url, gt_url)
+
+        assert match is True
+    
+    def test_max_price_only_agent_has_min(self):
+        gt_url = (
+            "https://www.hotels.com/Hotel-Search?"
+            "destination=Seattle"
+            "&nightly_price=462"
+        )
+
+        agent_url = (
+            "https://www.hotels.com/Hotel-Search?"
+            "destination=Seattle"
+            "&nightly_price=-3"
+            "&nightly_price=462"
+        )
+
+        match, _ = HotelsComUrlMatch(gt_url)._urls_match(
+            agent_url,
+            gt_url,
+        )
+
+        assert match is True

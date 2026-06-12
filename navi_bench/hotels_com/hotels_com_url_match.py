@@ -285,6 +285,73 @@ def _parse_amenities(raw: str) -> list[str]:
     parts = [p.strip().upper() for p in raw.split(",") if p.strip()]
     return sorted(parts)
 
+def _parse_multi_value_filter(values: list[str]) -> list[str]:
+    """Parse repeated query-param filters into a normalized sorted list.
+
+    Example:
+        amenities=POOL&amenities=PETS
+        -> ["PETS", "POOL"]
+    """
+
+    if not values:
+        return []
+
+    return sorted(
+        value.strip().upper()
+        for value in values
+        if value and value.strip()
+    )
+
+def _parse_price_range(query: dict) -> tuple[int | None, int | None]:
+    """
+    Hotels.com price filters.
+
+    Examples:
+
+    nightly_price=256&nightly_price=462
+        -> (256, 462)
+
+    nightly_price=123&nightly_price=-2
+        -> (123, None)
+
+    nightly_price=-3&nightly_price=462
+        -> (None, 462)
+    """
+
+    values = query.get("nightly_price", [])
+
+    if len(values) >= 2:
+        low = values[0]
+        high = values[1]
+
+        min_price = None
+        max_price = None
+
+        if low.isdigit():
+            min_price = int(low)
+
+        if high.isdigit():
+            max_price = int(high)
+
+        return min_price, max_price
+
+    # legacy support
+    price_min_raw = _get_param(query, "f-price-min", "price_min")
+    price_max_raw = _get_param(query, "f-price-max", "price_max")
+
+    price_min = (
+        int(price_min_raw)
+        if price_min_raw and price_min_raw.isdigit()
+        else None
+    )
+
+    price_max = (
+        int(price_max_raw)
+        if price_max_raw and price_max_raw.isdigit()
+        else None
+    )
+
+    return price_min, price_max
 
 # =============================================================================
 # URL PARSER
@@ -374,26 +441,63 @@ def parse_hotels_com_url(url: str) -> dict[str, Any]:
 
     # --- Filters ---
     # Star rating: f-star-rating=4,5
-    star_raw = _get_param(query, "f-star-rating", "star")
-    star_rating = _parse_star_rating(star_raw)
+    # star_raw = _get_param(query, "f-star-rating", "star")
+    # star_rating = _parse_star_rating(star_raw)
+
+    # Star ratings
+    star_values = []
+
+    if "star" in query:
+        star_values = query["star"]
+    else:
+        star_raw = _get_param(query, "f-star-rating")
+        if star_raw:
+            star_values = star_raw.split(",")
+
+    star_rating = sorted(
+        value.strip()
+        for value in star_values
+        if value.strip()
+    )
 
     # Price range (in dollars)
-    price_min_raw = _get_param(query, "f-price-min", "price_min")
-    price_max_raw = _get_param(query, "f-price-max", "price_max")
-    price_min = int(price_min_raw) if price_min_raw and price_min_raw.isdigit() else None
-    price_max = int(price_max_raw) if price_max_raw and price_max_raw.isdigit() else None
+    price_min, price_max = _parse_price_range(query)
+    # price_min_raw = _get_param(query, "f-price-min", "price_min")
+    # price_max_raw = _get_param(query, "f-price-max", "price_max")
+    # price_min = int(price_min_raw) if price_min_raw and price_min_raw.isdigit() else None
+    # price_max = int(price_max_raw) if price_max_raw and price_max_raw.isdigit() else None
 
     # Amenities: f-amenities=WIFI,POOL
     amenities_raw = _get_param(query, "f-amenities", "amenities")
     amenities = _parse_amenities(amenities_raw)
 
     # Guest rating: f-guest-rating=8
-    guest_rating = _get_param(query, "f-guest-rating", "guest_rating")
+    guest_rating = _get_param(query, "guestRating", "f-guest-rating", "guest_rating")
 
     # Payment type: paymentType=FREE_CANCELLATION
     payment_type = _get_param(
         query, "paymentType", "payment_type", "f-payment-type"
     ).upper() if _get_param(query, "paymentType", "payment_type", "f-payment-type") else ""
+
+    # Room view filters
+    room_views = _parse_multi_value_filter(
+        query.get("room_views_group", [])
+    )
+
+    # Room amenities filters
+    room_amenities = _parse_multi_value_filter(
+        query.get("room_amenities_group", [])
+    )
+
+    # Accessibility filters
+    accessibility = _parse_multi_value_filter(
+        query.get("accessibility", [])
+    )
+
+    # Meal plan filters
+    meal_plans = _parse_multi_value_filter(
+        query.get("mealPlan", [])
+    )
 
     return {
         "destination": _normalize_destination(
@@ -413,6 +517,10 @@ def parse_hotels_com_url(url: str) -> dict[str, Any]:
         "amenities": amenities,
         "guest_rating": guest_rating,
         "payment_type": payment_type,
+        "room_views": room_views,
+        "room_amenities": room_amenities,
+        "accessibility": accessibility,
+        "meal_plans": meal_plans,
     }
 
 
@@ -768,6 +876,69 @@ class HotelsComUrlMatch(BaseMetric):
                     details["mismatches"].append(
                         f"Payment type: '{agent['payment_type']}' "
                         f"vs '{gt['payment_type']}'"
+                    )
+                    return False, details
+            
+            # 15. Room views
+            if gt["room_views"]:
+                if not agent["room_views"]:
+                    details["mismatches"].append(
+                        f"Room views missing (expected {gt['room_views']})"
+                    )
+                    return False, details
+
+                if agent["room_views"] != gt["room_views"]:
+                    details["mismatches"].append(
+                        f"Room views: {agent['room_views']} "
+                        f"vs {gt['room_views']}"
+                    )
+                    return False, details
+
+
+            # 16. Room amenities
+            if gt["room_amenities"]:
+                if not agent["room_amenities"]:
+                    details["mismatches"].append(
+                        f"Room amenities missing (expected {gt['room_amenities']})"
+                    )
+                    return False, details
+
+                if agent["room_amenities"] != gt["room_amenities"]:
+                    details["mismatches"].append(
+                        f"Room amenities: {agent['room_amenities']} "
+                        f"vs {gt['room_amenities']}"
+                    )
+                    return False, details
+
+
+            # 17. Accessibility
+            if gt["accessibility"]:
+                if not agent["accessibility"]:
+                    details["mismatches"].append(
+                        f"Accessibility missing (expected {gt['accessibility']})"
+                    )
+                    return False, details
+
+                if agent["accessibility"] != gt["accessibility"]:
+                    details["mismatches"].append(
+                        f"Accessibility: {agent['accessibility']} "
+                        f"vs {gt['accessibility']}"
+                    )
+                    return False, details
+
+
+            # 18. Meal plans
+            if gt["meal_plans"]:
+                if not agent["meal_plans"]:
+                    details["mismatches"].append(
+                        f"Meal plans missing (expected {gt['meal_plans']})"
+                    )
+                    return False, details
+
+                if agent["meal_plans"] != gt["meal_plans"]:
+                    details["mismatches"].append(
+                        f"Meal plans: {agent['meal_plans']} "
+                        f"vs {gt['meal_plans']}"
                     )
                     return False, details
 
