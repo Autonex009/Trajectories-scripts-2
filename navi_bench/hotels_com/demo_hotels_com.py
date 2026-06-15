@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from playwright.async_api import async_playwright
 from loguru import logger
 
-# Import the Hotels.com evaluator
-from hotels_com_url_match import HotelsComUrlMatch
+# Import the Hotels.com evaluators
+from hotels_com_url_match import HotelsComUrlMatch, HotelsComCarUrlMatch
 
 @dataclass
 class BrowserConfig:
@@ -33,8 +33,8 @@ class TaskScenario:
     location: str = "United States"
     timezone: str = "America/New_York"
 
-# Demo Scenarios for Hotels.com US
-SCENARIOS: list[TaskScenario] = [
+# Demo Scenarios for Hotels.com US — Hotel Search
+HOTEL_SCENARIOS: list[TaskScenario] = [
     TaskScenario(
         task_id="hotels_com/search/ny_cheap",
         name="New York Hotels — Lowest Price",
@@ -73,6 +73,71 @@ SCENARIOS: list[TaskScenario] = [
     ),
 ]
 
+# Demo Scenarios for Hotels.com US — Car Rental
+CAR_SCENARIOS: list[TaskScenario] = [
+    TaskScenario(
+        task_id="hotels_com/car/jfk_basic",
+        name="Car Rental — JFK Airport",
+        description="Rent a car at JFK airport in New York with standard times.",
+        url="https://www.hotels.com/carsearch",
+        task_prompt=(
+            "Rent a car at JFK airport in New York. "
+            "Pick-up on July 10, 2026 and drop-off on July 14, 2026. "
+            "Both pick-up and drop-off at 10:30 AM."
+        ),
+        gt_url=[
+            "https://www.hotels.com/carsearch?locn=New%20York&pickupIATACode=JFK&d1=2026-7-10&d2=2026-7-14&time1=1030AM&time2=1030AM"
+        ],
+    ),
+    TaskScenario(
+        task_id="hotels_com/car/mia_diff_times",
+        name="Car Rental — Miami Different Times",
+        description="Rent a car at MIA with different pick-up and drop-off times.",
+        url="https://www.hotels.com/carsearch",
+        task_prompt=(
+            "I need a car at Miami International Airport. "
+            "Pick-up July 15, 2026 at 7:00 AM, "
+            "drop-off July 19, 2026 at 5:00 PM."
+        ),
+        gt_url=[
+            "https://www.hotels.com/carsearch?locn=Miami&pickupIATACode=MIA&d1=2026-7-15&d2=2026-7-19&time1=0700AM&time2=0500PM"
+        ],
+    ),
+    TaskScenario(
+        task_id="hotels_com/car/dfw_to_iah_oneway",
+        name="Car Rental — DFW to IAH One-Way",
+        description="One-way car rental from Dallas (DFW) to Houston (IAH).",
+        url="https://www.hotels.com/carsearch",
+        task_prompt=(
+            "One-way car rental. Pick up at Dallas Fort Worth (DFW) "
+            "on July 12, 2026 at 10:30 AM. Drop off at Houston George Bush "
+            "Intercontinental (IAH) on July 14, 2026 at 10:30 AM."
+        ),
+        gt_url=[
+            "https://www.hotels.com/carsearch?locn=Dallas&pickupIATACode=DFW&loc2=Houston&dropoffIATACode=IAH&d1=2026-7-12&d2=2026-7-14&time1=1030AM&time2=1030AM"
+        ],
+    ),
+    TaskScenario(
+        task_id="hotels_com/car/lga_unreliable",
+        name="Car Rental — Airport Change (Unreliable Narrator)",
+        description="Airport changes from JFK to EWR to LGA. Must pick FINAL.",
+        url="https://www.hotels.com/carsearch",
+        task_prompt=(
+            "I want to rent a car at JFK -- no wait, I'm flying into "
+            "Newark (EWR). Actually, we're landing at LaGuardia (LGA) "
+            "because the JFK flight was cancelled. FINAL: Pick up at "
+            "LaGuardia (LGA) on July 14, 2026 at 10:30 AM, "
+            "return July 18, 2026 at 10:30 AM."
+        ),
+        gt_url=[
+            "https://www.hotels.com/carsearch?locn=New%20York&pickupIATACode=LGA&d1=2026-7-14&d2=2026-7-18&time1=1030AM&time2=1030AM"
+        ],
+    ),
+]
+
+# Combine all scenarios
+SCENARIOS: list[TaskScenario] = HOTEL_SCENARIOS + CAR_SCENARIOS
+
 class ResultReporter:
     @staticmethod
     def print_result(result, evaluator, scenario) -> None:
@@ -96,7 +161,11 @@ class ResultReporter:
         print("-" * 80)
 
 async def run_scenario(scenario: TaskScenario) -> dict:
-    evaluator = HotelsComUrlMatch(gt_url=scenario.gt_url)
+    # Determine evaluator type based on task_id
+    if "car" in scenario.task_id or "car_rental" in scenario.task_id:
+        evaluator = HotelsComCarUrlMatch(gt_url=scenario.gt_url)
+    else:
+        evaluator = HotelsComUrlMatch(gt_url=scenario.gt_url)
     reporter = ResultReporter()
     
     print(f"\n{'='*60}\nTASK: {scenario.task_prompt}\n{'='*60}")
@@ -144,12 +213,20 @@ async def main():
     
     print("\n" + "=" * 60)
     print("  Hotels.com US — Demo Verifier")
-    print("  Verify URL-based navigation tasks on hotels.com")
+    print("  Verify URL-based navigation tasks")
+    print("  Categories: Hotel Search + Car Rental")
     print("=" * 60 + "\n")
     
-    for i, s in enumerate(SCENARIOS, 1):
-        print(f"[{i}] {s.name}")
-        print(f"    {s.description}\n")
+    print("--- Hotel Search ---")
+    for i, s in enumerate(HOTEL_SCENARIOS, 1):
+        print(f"  [{i}] {s.name}")
+        print(f"      {s.description}\n")
+    
+    offset = len(HOTEL_SCENARIOS)
+    print("--- Car Rental ---")
+    for i, s in enumerate(CAR_SCENARIOS, offset + 1):
+        print(f"  [{i}] {s.name}")
+        print(f"      {s.description}\n")
     
     choice = input("Select scenario index: ")
     if choice.isdigit() and 1 <= int(choice) <= len(SCENARIOS):

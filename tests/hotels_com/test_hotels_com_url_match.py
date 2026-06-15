@@ -9,19 +9,28 @@ Tests cover:
 - Multi-GT URL support (OR semantics)
 - Task config generation
 - Edge cases (non-Hotels.com URLs, empty URLs, property pages)
+- Car rental URL parsing and matching
+- Car rental async lifecycle
+- Car rental task config generation
 """
 
 import pytest
 from navi_bench.hotels_com.hotels_com_url_match import (
+    HotelsComCarUrlMatch,
+    HotelsComCarVerifierResult,
     HotelsComUrlMatch,
     HotelsComVerifierResult,
+    generate_car_task_config,
     generate_task_config,
+    parse_hotels_com_car_url,
     parse_hotels_com_url,
+    _normalize_car_location,
     _normalize_date,
-    _normalize_sort,
     _normalize_destination,
-    _parse_star_rating,
+    _normalize_sort,
+    _normalize_time,
     _parse_amenities,
+    _parse_star_rating,
 )
 
 
