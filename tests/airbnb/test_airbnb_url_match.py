@@ -1072,3 +1072,54 @@ class TestMUltiValueFilters:
         agent = "https://www.airbnb.com/s/Bengaluru--Karnataka/homes"
 
         assert not _match(agent, gt)[0]
+
+class TestPlaceIdIgnored:
+
+    def test_place_id_differs_but_matches(self):
+        gt = (
+            f"{BASE}/s/Paris--France/homes"
+            "?place_id=abc123"
+            "&adults=2"
+        )
+
+        agent = (
+            f"{BASE}/s/Paris--France/homes"
+            "?place_id=xyz789"
+            "&adults=2"
+        )
+
+        match, details = _match(agent, gt)
+
+        assert match, details
+
+    def test_place_id_only_in_gt(self):
+        gt = (
+            f"{BASE}/s/Paris--France/homes"
+            "?place_id=abc123"
+            "&adults=2"
+        )
+
+        agent = (
+            f"{BASE}/s/Paris--France/homes"
+            "?adults=2"
+        )
+
+        match, details = _match(agent, gt)
+
+        assert match, details
+
+    def test_place_id_only_in_agent(self):
+        gt = (
+            f"{BASE}/s/Paris--France/homes"
+            "?adults=2"
+        )
+
+        agent = (
+            f"{BASE}/s/Paris--France/homes"
+            "?place_id=xyz789"
+            "&adults=2"
+        )
+
+        match, details = _match(agent, gt)
+
+        assert match, details
