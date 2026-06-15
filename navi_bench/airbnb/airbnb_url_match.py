@@ -108,10 +108,6 @@ NUMERIC_FILTERS = [
 ]
 
 STRING_FILTERS = [
-
-    # Identity
-    "place_id",
-
     # Dates
     "date_picker_type",
     "checkin",
