@@ -31,7 +31,6 @@ the live production site (June 2026).
 | :--- | :--- | :--- |
 | **Homepage** | `/` | `hotels.com/` |
 | **Hotel Search Results** | `/Hotel-Search?destination=...` | `/Hotel-Search?destination=New%20York` |
-| **Car Search Results** | `/carsearch?locn=...` | `/carsearch?locn=New%20York` |
 | **Property Details** | `/ho{numeric_id}/` | `/ho123456/` |
 
 ### Detection Rules
@@ -39,12 +38,11 @@ the live production site (June 2026).
 | Rule | Pattern Match | Page Type |
 | :--- | :--- | :--- |
 | `/Hotel-Search` in path | Hotel search results | Search |
-| `/carsearch` in path | Car rental search results | Car Search |
 | `/ho{id}/` in path | Individual property page | Property |
 | `/` root only | Homepage | Landing |
 
 > [!IMPORTANT]
-> The verifier only processes **Hotel-Search** and **carsearch** URLs. Property detail pages
+> The verifier only processes **Hotel-Search** URLs. Property detail pages
 > (`/ho{id}/`) are explicitly ignored and will not produce a match.
 
 ---
@@ -56,41 +54,14 @@ Hotels.com is a **URL-BASED** verification target:
 | Aspect | Status |
 | :--- | :--- |
 | Search parameters in URL | ✅ All encoded as query params |
-| Filters in URL | ✅ Hotel: `f-star-rating`, etc. (Car filters are client-side only) |
-| Sort in URL | ✅ Hotel: `sort=PRICE_LOW_TO_HIGH` (Car sort is client-side only) |
+| Filters in URL | ✅ `f-star-rating`, `f-price-min`, `f-amenities`, etc. |
+| Sort in URL | ✅ `sort=PRICE_LOW_TO_HIGH` |
 | Login required | ❌ No — fully browsable without login |
 | JavaScript-only state | ❌ No — URL reflects complete search state |
 | DOM scraping needed | ❌ No — URL alone is sufficient |
 
 **Conclusion:** URL-based verification is appropriate. The URL contains the complete search
 specification. No DOM parsing or JavaScript execution is needed.
-
----
-
-## 2.5 Car Rental Search URLs & Parameters
-
-### Car URL Anatomy
-
-**Basic car search:**
-```
-https://www.hotels.com/carsearch?locn=New%20York&pickupIATACode=JFK&d1=2026-6-29&d2=2026-6-30&time1=1030AM&time2=1030AM
-```
-
-### Car Query Parameters
-
-| Field | Parameter | Values / Format | Verifier Handling |
-| :--- | :--- | :--- | :--- |
-| **Pick-up Location** | `locn` | URL-encoded string | Case-insensitive, city-part only |
-| **Pick-up IATA** | `pickupIATACode` | 3-letter code (e.g. `JFK`) | Case-insensitive exact match |
-| **Drop-off Location** | `loc2` | URL-encoded string | Checked only if specified in GT |
-| **Drop-off IATA** | `dropoffIATACode` | 3-letter code | Checked only if specified in GT |
-| **Pick-up Date** | `d1` (or `date1`) | `YYYY-M-D` or `M/D/YYYY` | Date-normalized exact match |
-| **Drop-off Date** | `d2` (or `date2`) | `YYYY-M-D` or `M/D/YYYY` | Date-normalized exact match |
-| **Pick-up Time** | `time1` | `HHMMAM/PM` (e.g., `1030AM`) | Upper-cased exact match |
-| **Drop-off Time** | `time2` | `HHMMAM/PM` (e.g., `0500PM`) | Upper-cased exact match |
-
-> [!NOTE]
-> Car rental filters (car type, transmission) and sort options are applied **client-side** on the `/carsearch` page. They do not appear in the URL and are thus not part of the URL-based verification.
 
 ---
 
