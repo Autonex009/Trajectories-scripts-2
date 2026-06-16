@@ -191,6 +191,15 @@ IGNORED_PARAMS = {
     "useRewards",
     "d1",              # duplicate of startDate (auto-added)
     "d2",              # duplicate of endDate (auto-added)
+    # Car search auto-generated params
+    "dpln",            # destination ID (auto-set from location)
+    "drid1",           # drop-off region ID (auto-set)
+    "olat",            # pickup latitude (auto-set)
+    "olon",            # pickup longitude (auto-set)
+    "dlat",            # drop-off latitude (auto-set)
+    "dlon",            # drop-off longitude (auto-set)
+    "selPageIndex",    # pagination state
+    "selCC",           # car class filter (separate comparison if needed)
 }
 
 
@@ -269,6 +278,31 @@ def _normalize_destination(raw: str) -> str:
     return decoded.split(",")[0].strip()
 
 
+def _normalize_star_value(raw: str) -> str:
+    """Normalize a single star rating value.
+
+    Hotels.com uses x10 values in the browser:
+        star=40 → '4' (4-star)
+        star=50 → '5' (5-star)
+        star=30 → '3' (3-star)
+    Legacy GT URLs might use plain values:
+        star=4  → '4'
+        f-star-rating=4,5 → '4', '5'
+
+    Strategy: if the value is a number ≥ 10, divide by 10.
+    """
+    if not raw:
+        return ""
+    raw = raw.strip()
+    try:
+        val = int(raw)
+        if val >= 10:
+            return str(val // 10)
+        return str(val)
+    except ValueError:
+        return raw
+
+
 def _parse_star_rating(raw: str) -> list[str]:
     """Parse star rating filter into sorted list of values.
 
@@ -277,7 +311,7 @@ def _parse_star_rating(raw: str) -> list[str]:
     """
     if not raw:
         return []
-    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    parts = [_normalize_star_value(p.strip()) for p in raw.split(",") if p.strip()]
     return sorted(parts)
 
 
@@ -447,11 +481,9 @@ def parse_hotels_com_url(url: str) -> dict[str, Any]:
     )
 
     # --- Filters ---
-    # Star rating: f-star-rating=4,5
-    # star_raw = _get_param(query, "f-star-rating", "star")
-    # star_rating = _parse_star_rating(star_raw)
-
-    # Star ratings
+    # Star rating: handles both formats:
+    #   - Repeated params: star=40&star=50 (browser-generated, x10 values)
+    #   - Comma-separated: f-star-rating=4,5 (legacy GT URLs)
     star_values = []
 
     if "star" in query:
@@ -462,7 +494,7 @@ def parse_hotels_com_url(url: str) -> dict[str, Any]:
             star_values = star_raw.split(",")
 
     star_rating = sorted(
-        value.strip()
+        _normalize_star_value(value.strip())
         for value in star_values
         if value.strip()
     )
@@ -486,7 +518,12 @@ def parse_hotels_com_url(url: str) -> dict[str, Any]:
         amenities_raw = _get_param(query, "f-amenities", "amenities")
         amenities = _parse_amenities(amenities_raw)
 
-    # Guest rating: f-guest-rating=8
+    # Guest rating: handles both formats:
+    #   - Browser-generated: guestRating=40 (x10 value, 40 = "Very good 8+")
+    #   - Legacy GT: f-guest-rating=8
+    # We normalize to the raw value — both sides must use the same format.
+    # The verifier compares normalized values, so GT should use the same
+    # param name the browser uses.
     guest_rating = _get_param(query, "guestRating", "f-guest-rating", "guest_rating")
 
     # Payment type: paymentType=FREE_CANCELLATION
@@ -1616,12 +1653,20 @@ def parse_hotels_com_car_url(url: str) -> dict[str, Any]:
     """Parse a Hotels.com /carsearch URL into normalized components.
 
     Browser-verified Car URL anatomy (Jun 2026):
-      /carsearch?locn=New%20York%2C%20NY%2C%20United%20States
-        &pickupIATACode=JFK
-        &d1=2026-7-10&d2=2026-7-14
+      /carsearch?locn=Los%20Angeles%2C%20CA%2C%20United%20States%20of%20America%20(LAX-Los%20Angeles%20Intl.)
+        &pickupCode=LAX                   (IATA code — browser uses pickupCode)
+        &date1=7/1/2026&date2=7/5/2026    (M/D/YYYY format)
         &time1=1030AM&time2=1030AM
-        &loc2=Houston            (drop-off location, if different)
-        &dropoffIATACode=IAH     (drop-off airport IATA code)
+        &loc2=Houston                     (drop-off location, if different)
+        &dropoffCode=IAH                  (drop-off airport IATA code)
+        &dpln=5783884                     (auto-generated destination ID)
+        &olat=33.94415&olon=-118.4032     (auto-generated coords)
+        &selCC=["economy","compact"]      (car class filter, JSON array)
+        &sort=PRICE                       (sort order)
+    
+    Also supports legacy param names:
+        &pickupIATACode=JFK  &dropoffIATACode=IAH
+        &d1=2026-7-10        &d2=2026-7-14
     """
     parsed = urlparse(url)
     query = parse_qs(parsed.query)
@@ -1632,7 +1677,8 @@ def parse_hotels_com_car_url(url: str) -> dict[str, Any]:
     )
 
     # --- Pickup IATA Code ---
-    pickup_iata_raw = _get_param(query, "pickupIATACode")
+    # Browser uses pickupCode, legacy uses pickupIATACode
+    pickup_iata_raw = _get_param(query, "pickupCode", "pickupIATACode")
     pickup_iata = pickup_iata_raw.strip().upper() if pickup_iata_raw else ""
 
     # --- Dates ---
@@ -1653,7 +1699,8 @@ def parse_hotels_com_car_url(url: str) -> dict[str, Any]:
     )
 
     # --- Drop-off IATA Code ---
-    dropoff_iata_raw = _get_param(query, "dropoffIATACode")
+    # Browser uses dropoffCode, legacy uses dropoffIATACode
+    dropoff_iata_raw = _get_param(query, "dropoffCode", "dropoffIATACode")
     dropoff_iata = dropoff_iata_raw.strip().upper() if dropoff_iata_raw else ""
 
     return {

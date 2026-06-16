@@ -838,7 +838,14 @@ class TestQueryParameters:
 
         r = parse_hotels_com_url(url)
 
-        assert r["star_rating"] == ["30", "40"]
+        # x10 values are normalized: 40→4, 30→3
+        assert r["star_rating"] == ["3", "4"]
+
+    def test_star_rating_parsed_legacy(self):
+        """Legacy format f-star-rating=4,5 also normalizes correctly."""
+        url = f"{BASE}?f-star-rating=4,5"
+        r = parse_hotels_com_url(url)
+        assert r["star_rating"] == ["4", "5"]
     
     def test_star_rating_match(self):
         gt = (
@@ -853,6 +860,13 @@ class TestQueryParameters:
 
         match, _ = _match(agent, gt)
 
+        assert match is True
+
+    def test_star_rating_cross_format_match(self):
+        """GT uses legacy f-star-rating=4,5, agent uses browser star=40&star=50."""
+        gt = f"{BASE}?f-star-rating=4,5"
+        agent = f"{BASE}?star=40&star=50"
+        match, _ = _match(agent, gt)
         assert match is True
     
     def test_star_rating_fail(self):
@@ -1127,6 +1141,25 @@ class TestCarUrlParsing:
         r = parse_hotels_com_car_url(url)
         assert r["dropoff_iata"] == "IAH"
 
+    def test_pickup_iata_via_pickupCode(self):
+        """Browser-verified: Hotels.com uses pickupCode, not pickupIATACode."""
+        url = f"{CAR_BASE}?pickupCode=LAX"
+        r = parse_hotels_com_car_url(url)
+        assert r["pickup_iata"] == "LAX"
+
+    def test_dropoff_iata_via_dropoffCode(self):
+        """Browser-verified: Hotels.com uses dropoffCode, not dropoffIATACode."""
+        url = f"{CAR_BASE}?dropoffCode=IAH"
+        r = parse_hotels_com_car_url(url)
+        assert r["dropoff_iata"] == "IAH"
+
+    def test_dates_mdy_format(self):
+        """Browser-verified: Hotels.com uses date1=M/D/YYYY format."""
+        url = f"{CAR_BASE}?date1=7/1/2026&date2=7/5/2026"
+        r = parse_hotels_com_car_url(url)
+        assert r["pickup_date"] == "2026-07-01"
+        assert r["dropoff_date"] == "2026-07-05"
+
 
 # =============================================================================
 # 15. CAR RENTAL — EXACT MATCHING
@@ -1242,6 +1275,26 @@ class TestCarMatchingTolerance:
         agent = f"{CAR_BASE}?locn=New%20York%2C%20NY%2C%20United%20States"
         match, _ = _car_match(agent, gt)
         assert match is True
+
+    def test_cross_format_legacy_gt_vs_browser_agent(self):
+        """GT uses legacy params, agent uses browser-verified format."""
+        gt = (
+            f"{CAR_BASE}?locn=Los%20Angeles&pickupIATACode=LAX"
+            "&d1=2026-7-1&d2=2026-7-5"
+            "&time1=1030AM&time2=1030AM"
+        )
+        agent = (
+            f"{CAR_BASE}?date1=7/1/2026&date2=7/5/2026"
+            "&time1=1030AM&time2=1030AM"
+            "&dpln=5783884"
+            "&locn=Los%20Angeles%2C%20CA%2C%20United%20States%20of%20America"
+            "%20%28LAX-Los%20Angeles%20Intl.%29"
+            "&pickupCode=LAX"
+            "&olat=33.94415&olon=-118.4032"
+            "&useRewards=&selCC=%5B%22economy%22%5D&selPageIndex=0"
+        )
+        match, details = _car_match(agent, gt)
+        assert match is True, f"False negative! Mismatches: {details.get('mismatches')}"
 
 
 # =============================================================================
