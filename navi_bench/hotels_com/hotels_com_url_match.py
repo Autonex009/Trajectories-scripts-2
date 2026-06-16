@@ -35,6 +35,7 @@ Note: Hotels.com is an Expedia Group property. Its URL structure is nearly
 identical to expedia.com/Hotel-Search. Prices are in DOLLARS (not cents).
 """
 
+import json
 import re
 from datetime import datetime
 from itertools import product
@@ -1622,6 +1623,40 @@ def _normalize_time(raw: str) -> str:
     return raw.strip().replace(" ", "").upper()
 
 
+def _parse_json_array_param(raw: str) -> list[str]:
+    """Parse a JSON-array URL parameter into a sorted list of lowercase values.
+
+    Hotels.com car search encodes some filters as JSON arrays in the URL:
+        selCC=["economy","compact","midsize"]
+        selVen=["budget","avis"]
+
+    The brackets may be URL-encoded (%5B / %5D) or literal.
+    Falls back to comma-separated parsing if JSON decode fails.
+
+    Returns sorted list of lowercase values, or empty list if no value.
+    """
+    if not raw:
+        return []
+
+    decoded = unquote(raw).strip()
+
+    # Try JSON parsing first
+    try:
+        parsed = json.loads(decoded)
+        if isinstance(parsed, list):
+            return sorted(str(v).strip().lower() for v in parsed if str(v).strip())
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Fallback: strip brackets and split on comma
+    decoded = decoded.strip("[]")
+    if decoded:
+        parts = [p.strip().strip('"').strip("'").lower() for p in decoded.split(",") if p.strip()]
+        return sorted(parts)
+
+    return []
+
+
 def _normalize_car_location(raw: str) -> str:
     """Normalize a car rental location for comparison.
 
@@ -1703,6 +1738,23 @@ def parse_hotels_com_car_url(url: str) -> dict[str, Any]:
     dropoff_iata_raw = _get_param(query, "dropoffCode", "dropoffIATACode")
     dropoff_iata = dropoff_iata_raw.strip().upper() if dropoff_iata_raw else ""
 
+    # --- Car Class / Type ---
+    # Browser-verified: selCC=["economy","compact","midsize"] (JSON array string)
+    car_class = _parse_json_array_param(
+        _get_param(query, "selCC", "carClass", "carType")
+    )
+
+    # --- Vendor / Rental Company ---
+    # Browser-verified: selVen=["budget","avis"] (JSON array string)
+    vendor = _parse_json_array_param(
+        _get_param(query, "selVen", "vendor", "rentalCompany")
+    )
+
+    # --- Sort Order ---
+    # Browser-verified: sort=price | sort=RECOMMENDED
+    sort_raw = _get_param(query, "sort")
+    sort_order = sort_raw.strip().upper() if sort_raw else ""
+
     return {
         "pickup_location": pickup_location,
         "pickup_iata": pickup_iata,
@@ -1712,6 +1764,9 @@ def parse_hotels_com_car_url(url: str) -> dict[str, Any]:
         "dropoff_time": dropoff_time,
         "dropoff_location": dropoff_location,
         "dropoff_iata": dropoff_iata,
+        "car_class": car_class,
+        "vendor": vendor,
+        "sort": sort_order,
     }
 
 
@@ -1726,13 +1781,19 @@ class HotelsComCarUrlMatch(BaseMetric):
     Compares the agent's final /carsearch URL against expected ground truth
     URLs. All car search state is encoded in the URL query parameters.
 
-    Parameters compared:
+    Browser-verified parameters compared (Jun 2026):
       - Pick-up location (locn) — city-part, case-insensitive
-      - Pick-up IATA code (pickupIATACode)
-      - Pick-up / Drop-off dates (d1, d2)
+      - Pick-up IATA code (pickupCode / pickupIATACode)
+      - Pick-up / Drop-off dates (date1/d1, date2/d2) — normalized to YYYY-MM-DD
       - Pick-up / Drop-off times (time1, time2) — optional in GT
       - Drop-off location (loc2) — for one-way rentals
-      - Drop-off IATA code (dropoffIATACode)
+      - Drop-off IATA code (dropoffCode / dropoffIATACode)
+      - Car class / type (selCC) — JSON array, e.g. ["economy","compact"]
+      - Vendor / rental company (selVen) — JSON array, e.g. ["budget"]
+      - Sort order (sort) — PRICE, RECOMMENDED, etc.
+
+    Auto-generated params ignored: dpln, drid1, olat, olon, dlat, dlon,
+    selPageIndex, useRewards.
     """
 
     @beartype
@@ -1909,6 +1970,48 @@ class HotelsComCarUrlMatch(BaseMetric):
                 details["mismatches"].append(
                     f"Drop-off IATA: '{agent['dropoff_iata']}' "
                     f"vs '{gt['dropoff_iata']}'"
+                )
+                return False, details
+
+        # 9. Car class / type (optional — only check if GT specifies it)
+        if gt["car_class"]:
+            if not agent["car_class"]:
+                details["mismatches"].append(
+                    f"Car class missing (expected {gt['car_class']})"
+                )
+                return False, details
+            if sorted(agent["car_class"]) != sorted(gt["car_class"]):
+                details["mismatches"].append(
+                    f"Car class: {agent['car_class']} "
+                    f"vs {gt['car_class']}"
+                )
+                return False, details
+
+        # 10. Vendor / rental company (optional — only check if GT specifies)
+        if gt["vendor"]:
+            if not agent["vendor"]:
+                details["mismatches"].append(
+                    f"Vendor missing (expected {gt['vendor']})"
+                )
+                return False, details
+            if sorted(agent["vendor"]) != sorted(gt["vendor"]):
+                details["mismatches"].append(
+                    f"Vendor: {agent['vendor']} "
+                    f"vs {gt['vendor']}"
+                )
+                return False, details
+
+        # 11. Sort order (optional — only check if GT specifies it)
+        if gt["sort"]:
+            if not agent["sort"]:
+                details["mismatches"].append(
+                    f"Sort order missing (expected '{gt['sort']}')"
+                )
+                return False, details
+            if agent["sort"] != gt["sort"]:
+                details["mismatches"].append(
+                    f"Sort order: '{agent['sort']}' "
+                    f"vs '{gt['sort']}'"
                 )
                 return False, details
 

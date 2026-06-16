@@ -28,8 +28,10 @@ from navi_bench.hotels_com.hotels_com_url_match import (
     _normalize_date,
     _normalize_destination,
     _normalize_sort,
+    _normalize_star_value,
     _normalize_time,
     _parse_amenities,
+    _parse_json_array_param,
     _parse_star_rating,
 )
 
@@ -1159,6 +1161,160 @@ class TestCarUrlParsing:
         r = parse_hotels_com_car_url(url)
         assert r["pickup_date"] == "2026-07-01"
         assert r["dropoff_date"] == "2026-07-05"
+
+
+# =============================================================================
+# 14b. CAR RENTAL — JSON ARRAY PARSING & FILTER HELPERS
+# =============================================================================
+
+class TestJsonArrayParsing:
+
+    def test_parse_json_array_basic(self):
+        assert _parse_json_array_param('["economy","compact"]') == ["compact", "economy"]
+
+    def test_parse_json_array_single(self):
+        assert _parse_json_array_param('["midsize"]') == ["midsize"]
+
+    def test_parse_json_array_url_encoded(self):
+        """URL-encoded brackets: %5B and %5D."""
+        assert _parse_json_array_param('%5B%22economy%22%2C%22compact%22%5D') == ["compact", "economy"]
+
+    def test_parse_json_array_empty(self):
+        assert _parse_json_array_param("") == []
+
+    def test_parse_json_array_fallback_comma_separated(self):
+        """Fallback to comma-separated parsing if not valid JSON."""
+        assert _parse_json_array_param("economy,compact") == ["compact", "economy"]
+
+    def test_normalize_star_value_x10(self):
+        assert _normalize_star_value("40") == "4"
+        assert _normalize_star_value("50") == "5"
+        assert _normalize_star_value("30") == "3"
+
+    def test_normalize_star_value_plain(self):
+        assert _normalize_star_value("4") == "4"
+        assert _normalize_star_value("5") == "5"
+
+
+# =============================================================================
+# 14c. CAR RENTAL — FILTER PARSING
+# =============================================================================
+
+class TestCarFilterParsing:
+
+    def test_car_class_parsed(self):
+        url = f'{CAR_BASE}?selCC=%5B%22economy%22%2C%22compact%22%5D'
+        r = parse_hotels_com_car_url(url)
+        assert r["car_class"] == ["compact", "economy"]
+
+    def test_vendor_parsed(self):
+        url = f'{CAR_BASE}?selVen=%5B%22budget%22%2C%22avis%22%5D'
+        r = parse_hotels_com_car_url(url)
+        assert r["vendor"] == ["avis", "budget"]
+
+    def test_sort_parsed(self):
+        url = f"{CAR_BASE}?sort=price"
+        r = parse_hotels_com_car_url(url)
+        assert r["sort"] == "PRICE"
+
+    def test_sort_recommended(self):
+        url = f"{CAR_BASE}?sort=RECOMMENDED"
+        r = parse_hotels_com_car_url(url)
+        assert r["sort"] == "RECOMMENDED"
+
+    def test_no_filters_returns_empty(self):
+        url = f"{CAR_BASE}?locn=New%20York&d1=2026-7-1&d2=2026-7-5"
+        r = parse_hotels_com_car_url(url)
+        assert r["car_class"] == []
+        assert r["vendor"] == []
+        assert r["sort"] == ""
+
+
+# =============================================================================
+# 14d. CAR RENTAL — FILTER MATCHING
+# =============================================================================
+
+class TestCarFilterMatching:
+
+    def test_car_class_match(self):
+        gt = f'{CAR_BASE}?locn=New%20York&selCC=%5B%22economy%22%2C%22compact%22%5D'
+        agent = f'{CAR_BASE}?locn=New%20York&selCC=%5B%22compact%22%2C%22economy%22%5D'
+        match, _ = _car_match(agent, gt)
+        assert match is True
+
+    def test_car_class_mismatch(self):
+        gt = f'{CAR_BASE}?locn=New%20York&selCC=%5B%22economy%22%5D'
+        agent = f'{CAR_BASE}?locn=New%20York&selCC=%5B%22midsize%22%5D'
+        match, details = _car_match(agent, gt)
+        assert match is False
+        assert any("Car class" in m for m in details["mismatches"])
+
+    def test_car_class_missing_in_agent(self):
+        gt = f'{CAR_BASE}?locn=New%20York&selCC=%5B%22economy%22%5D'
+        agent = f'{CAR_BASE}?locn=New%20York'
+        match, details = _car_match(agent, gt)
+        assert match is False
+        assert any("Car class missing" in m for m in details["mismatches"])
+
+    def test_car_class_not_in_gt_passes(self):
+        """If GT doesn't specify car class, agent's class is ignored."""
+        gt = f'{CAR_BASE}?locn=New%20York'
+        agent = f'{CAR_BASE}?locn=New%20York&selCC=%5B%22economy%22%5D'
+        match, _ = _car_match(agent, gt)
+        assert match is True
+
+    def test_vendor_match(self):
+        gt = f'{CAR_BASE}?locn=New%20York&selVen=%5B%22budget%22%5D'
+        agent = f'{CAR_BASE}?locn=New%20York&selVen=%5B%22budget%22%5D'
+        match, _ = _car_match(agent, gt)
+        assert match is True
+
+    def test_vendor_mismatch(self):
+        gt = f'{CAR_BASE}?locn=New%20York&selVen=%5B%22budget%22%5D'
+        agent = f'{CAR_BASE}?locn=New%20York&selVen=%5B%22avis%22%5D'
+        match, details = _car_match(agent, gt)
+        assert match is False
+        assert any("Vendor" in m for m in details["mismatches"])
+
+    def test_sort_match(self):
+        gt = f'{CAR_BASE}?locn=New%20York&sort=PRICE'
+        agent = f'{CAR_BASE}?locn=New%20York&sort=price'
+        match, _ = _car_match(agent, gt)
+        assert match is True
+
+    def test_sort_mismatch(self):
+        gt = f'{CAR_BASE}?locn=New%20York&sort=PRICE'
+        agent = f'{CAR_BASE}?locn=New%20York&sort=RECOMMENDED'
+        match, details = _car_match(agent, gt)
+        assert match is False
+        assert any("Sort order" in m for m in details["mismatches"])
+
+    def test_full_browser_url_with_filters(self):
+        """Real browser-verified URL with all filters applied."""
+        gt = (
+            f"{CAR_BASE}?locn=Los%20Angeles"
+            "&pickupCode=LAX"
+            "&date1=7/1/2026&date2=7/5/2026"
+            "&time1=1030AM&time2=1030AM"
+            '&selCC=%5B%22economy%22%2C%22compact%22%5D'
+            '&selVen=%5B%22budget%22%5D'
+            "&sort=PRICE"
+        )
+        agent = (
+            f"{CAR_BASE}?date1=7/1/2026&date2=7/5/2026"
+            "&time1=1030AM&time2=1030AM"
+            "&dpln=5783884"
+            "&locn=Los%20Angeles%2C%20CA%2C%20United%20States%20of%20America"
+            "%20%28LAX-Los%20Angeles%20Intl.%29"
+            "&pickupCode=LAX"
+            "&olat=33.94415&olon=-118.4032"
+            '&selCC=%5B%22economy%22%2C%22compact%22%5D'
+            '&selVen=%5B%22budget%22%5D'
+            "&sort=price"
+            "&selPageIndex=0&useRewards="
+        )
+        match, details = _car_match(agent, gt)
+        assert match is True, f"False negative! Mismatches: {details.get('mismatches')}"
 
 
 # =============================================================================
