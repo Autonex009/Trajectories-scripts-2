@@ -1537,7 +1537,430 @@ def generate_task_config(
 
 
 # =============================================================================
+# CAR RENTAL — RESULT MODEL
+# =============================================================================
+
+
+class HotelsComCarVerifierResult(BaseModel):
+    """Detailed verification result for Hotels.com car rental URL matching."""
+
+    score: float
+    match: bool
+    agent_url: str = ""
+    gt_url: str = ""
+    details: dict = {}
+
+
+# =============================================================================
+# CAR RENTAL — NORMALIZATION HELPERS
+# =============================================================================
+
+
+def _normalize_time(raw: str) -> str:
+    """Normalize a time string to HHMM[AM|PM] format.
+
+    Examples:
+        '1030AM'   → '1030AM'
+        '1030am'   → '1030AM'
+        ' 0230 PM' → '0230PM'
+        ''         → ''
+    """
+    if not raw:
+        return ""
+    return raw.strip().replace(" ", "").upper()
+
+
+def _normalize_car_location(raw: str) -> str:
+    """Normalize a car rental location for comparison.
+
+    - URL-decode
+    - Lowercase
+    - Take city part only (before first comma or parenthesis)
+    - Strip whitespace
+
+    Examples:
+        'New York, NY, United States'         → 'new york'
+        'New York (JFK-John F. Kennedy Intl.)' → 'new york'
+        'Los Angeles'                         → 'los angeles'
+    """
+    if not raw:
+        return ""
+    decoded = unquote(raw).strip().lower()
+    # Remove airport code part in parentheses
+    decoded = re.sub(r"\s*\(.*?\)\s*", "", decoded).strip()
+    # Take city part only (before first comma)
+    return decoded.split(",")[0].strip()
+
+
+# =============================================================================
+# CAR RENTAL — URL PARSER
+# =============================================================================
+
+
+def parse_hotels_com_car_url(url: str) -> dict[str, Any]:
+    """Parse a Hotels.com /carsearch URL into normalized components.
+
+    Browser-verified Car URL anatomy (Jun 2026):
+      /carsearch?locn=New%20York%2C%20NY%2C%20United%20States
+        &pickupIATACode=JFK
+        &d1=2026-7-10&d2=2026-7-14
+        &time1=1030AM&time2=1030AM
+        &loc2=Houston            (drop-off location, if different)
+        &dropoffIATACode=IAH     (drop-off airport IATA code)
+    """
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query)
+
+    # --- Pickup Location ---
+    pickup_location = _normalize_car_location(
+        _get_param(query, "locn", "loc1")
+    )
+
+    # --- Pickup IATA Code ---
+    pickup_iata_raw = _get_param(query, "pickupIATACode")
+    pickup_iata = pickup_iata_raw.strip().upper() if pickup_iata_raw else ""
+
+    # --- Dates ---
+    pickup_date = _normalize_date(
+        _get_param(query, "d1", "date1", "startDate")
+    )
+    dropoff_date = _normalize_date(
+        _get_param(query, "d2", "date2", "endDate")
+    )
+
+    # --- Times ---
+    pickup_time = _normalize_time(_get_param(query, "time1"))
+    dropoff_time = _normalize_time(_get_param(query, "time2"))
+
+    # --- Drop-off Location (one-way rentals) ---
+    dropoff_location = _normalize_car_location(
+        _get_param(query, "loc2")
+    )
+
+    # --- Drop-off IATA Code ---
+    dropoff_iata_raw = _get_param(query, "dropoffIATACode")
+    dropoff_iata = dropoff_iata_raw.strip().upper() if dropoff_iata_raw else ""
+
+    return {
+        "pickup_location": pickup_location,
+        "pickup_iata": pickup_iata,
+        "pickup_date": pickup_date,
+        "dropoff_date": dropoff_date,
+        "pickup_time": pickup_time,
+        "dropoff_time": dropoff_time,
+        "dropoff_location": dropoff_location,
+        "dropoff_iata": dropoff_iata,
+    }
+
+
+# =============================================================================
+# CAR RENTAL — VERIFIER CLASS
+# =============================================================================
+
+
+class HotelsComCarUrlMatch(BaseMetric):
+    """URL-based Hotels.com verifier for car rental tasks.
+
+    Compares the agent's final /carsearch URL against expected ground truth
+    URLs. All car search state is encoded in the URL query parameters.
+
+    Parameters compared:
+      - Pick-up location (locn) — city-part, case-insensitive
+      - Pick-up IATA code (pickupIATACode)
+      - Pick-up / Drop-off dates (d1, d2)
+      - Pick-up / Drop-off times (time1, time2) — optional in GT
+      - Drop-off location (loc2) — for one-way rentals
+      - Drop-off IATA code (dropoffIATACode)
+    """
+
+    @beartype
+    def __init__(self, *, gt_url: str | list[str]):
+        super().__init__()
+        if isinstance(gt_url, str):
+            gt_url = [gt_url]
+        self._gt_urls = gt_url
+        self._agent_url: str = ""
+        self._match_details: dict = {}
+        self._matched_gt_url: str = ""
+
+    async def reset(self) -> None:
+        self._agent_url = ""
+        self._match_details = {}
+        self._matched_gt_url = ""
+
+    async def update(self, *, url: str = "", **kwargs: Any) -> None:
+        if not url:
+            return
+        parsed = urlparse(url)
+        host = parsed.hostname or ""
+        # Only accept Hotels.com domains
+        if not (host in VALID_BASE_DOMAINS or host in REGIONAL_DOMAINS):
+            return
+        # Only accept /carsearch paths
+        if "/carsearch" not in parsed.path.lower():
+            return
+        self._agent_url = url
+
+    async def compute(self) -> FinalResult:
+        if not self._agent_url:
+            return FinalResult(score=0.0)
+
+        for gt_url in self._gt_urls:
+            match, details = self._urls_match(self._agent_url, gt_url)
+            if match:
+                self._match_details = details
+                self._matched_gt_url = gt_url
+                return FinalResult(score=1.0)
+
+        self._match_details = details  # noqa: F821 — last details from loop
+        return FinalResult(score=0.0)
+
+    async def compute_detailed(self) -> HotelsComCarVerifierResult:
+        result = await self.compute()
+        return HotelsComCarVerifierResult(
+            score=result.score,
+            match=result.score >= 1.0,
+            agent_url=self._agent_url,
+            gt_url=self._matched_gt_url or (self._gt_urls[0] if self._gt_urls else ""),
+            details=self._match_details,
+        )
+
+    def _urls_match(
+        self, agent_url: str, gt_url: str
+    ) -> tuple[bool, dict]:
+        """Compare agent car-search URL against a single ground-truth URL."""
+        agent = parse_hotels_com_car_url(agent_url)
+        gt = parse_hotels_com_car_url(gt_url)
+
+        details: dict[str, Any] = {
+            "agent_parsed": agent,
+            "gt_parsed": gt,
+            "mismatches": [],
+        }
+
+        # 1. Pick-up location
+        if gt["pickup_location"]:
+            if not agent["pickup_location"]:
+                details["mismatches"].append(
+                    f"Pick-up location missing (expected '{gt['pickup_location']}')"
+                )
+                return False, details
+            if agent["pickup_location"] != gt["pickup_location"]:
+                details["mismatches"].append(
+                    f"Pick-up location: '{agent['pickup_location']}' "
+                    f"vs '{gt['pickup_location']}'"
+                )
+                return False, details
+
+        # 2. Pick-up IATA code
+        if gt["pickup_iata"]:
+            if not agent["pickup_iata"]:
+                details["mismatches"].append(
+                    f"Pick-up IATA missing (expected '{gt['pickup_iata']}')"
+                )
+                return False, details
+            if agent["pickup_iata"] != gt["pickup_iata"]:
+                details["mismatches"].append(
+                    f"Pick-up IATA: '{agent['pickup_iata']}' "
+                    f"vs '{gt['pickup_iata']}'"
+                )
+                return False, details
+
+        # 3. Pick-up date
+        if gt["pickup_date"]:
+            if not agent["pickup_date"]:
+                details["mismatches"].append(
+                    f"Pick-up date missing (expected '{gt['pickup_date']}')"
+                )
+                return False, details
+            if agent["pickup_date"] != gt["pickup_date"]:
+                details["mismatches"].append(
+                    f"Pick-up date: '{agent['pickup_date']}' "
+                    f"vs '{gt['pickup_date']}'"
+                )
+                return False, details
+
+        # 4. Drop-off date
+        if gt["dropoff_date"]:
+            if not agent["dropoff_date"]:
+                details["mismatches"].append(
+                    f"Drop-off date missing (expected '{gt['dropoff_date']}')"
+                )
+                return False, details
+            if agent["dropoff_date"] != gt["dropoff_date"]:
+                details["mismatches"].append(
+                    f"Drop-off date: '{agent['dropoff_date']}' "
+                    f"vs '{gt['dropoff_date']}'"
+                )
+                return False, details
+
+        # 5. Pick-up time (optional — only check if GT specifies it)
+        if gt["pickup_time"]:
+            if not agent["pickup_time"]:
+                details["mismatches"].append(
+                    f"Pick-up time missing (expected '{gt['pickup_time']}')"
+                )
+                return False, details
+            if agent["pickup_time"] != gt["pickup_time"]:
+                details["mismatches"].append(
+                    f"Pick-up time: '{agent['pickup_time']}' "
+                    f"vs '{gt['pickup_time']}'"
+                )
+                return False, details
+
+        # 6. Drop-off time (optional — only check if GT specifies it)
+        if gt["dropoff_time"]:
+            if not agent["dropoff_time"]:
+                details["mismatches"].append(
+                    f"Drop-off time missing (expected '{gt['dropoff_time']}')"
+                )
+                return False, details
+            if agent["dropoff_time"] != gt["dropoff_time"]:
+                details["mismatches"].append(
+                    f"Drop-off time: '{agent['dropoff_time']}' "
+                    f"vs '{gt['dropoff_time']}'"
+                )
+                return False, details
+
+        # 7. Drop-off location (one-way)
+        if gt["dropoff_location"]:
+            if not agent["dropoff_location"]:
+                details["mismatches"].append(
+                    f"Drop-off location missing (expected '{gt['dropoff_location']}')"
+                )
+                return False, details
+            if agent["dropoff_location"] != gt["dropoff_location"]:
+                details["mismatches"].append(
+                    f"Drop-off location: '{agent['dropoff_location']}' "
+                    f"vs '{gt['dropoff_location']}'"
+                )
+                return False, details
+
+        # 8. Drop-off IATA code
+        if gt["dropoff_iata"]:
+            if not agent["dropoff_iata"]:
+                details["mismatches"].append(
+                    f"Drop-off IATA missing (expected '{gt['dropoff_iata']}')"
+                )
+                return False, details
+            if agent["dropoff_iata"] != gt["dropoff_iata"]:
+                details["mismatches"].append(
+                    f"Drop-off IATA: '{agent['dropoff_iata']}' "
+                    f"vs '{gt['dropoff_iata']}'"
+                )
+                return False, details
+
+        return True, details
+
+    def __repr__(self) -> str:
+        urls_repr = ", ".join(f"'{u}'" for u in self._gt_urls)
+        return f"HotelsComCarUrlMatch(gt_url=[{urls_repr}])"
+
+
+# =============================================================================
+# CAR RENTAL — TASK CONFIG GENERATOR
+# =============================================================================
+
+
+@beartype
+def generate_car_task_config(
+    *,
+    task: str,
+    location: str,
+    timezone: str,
+    gt_url: list[str] | None = None,
+    url: str = "https://www.hotels.com/carsearch",
+    values: dict[str, str] | None = None,
+    timestamp: datetime | None = None,
+) -> BaseTaskConfig:
+    """Generate a task configuration for Hotels.com car rental verification.
+
+    Args:
+        task: Task description with optional {placeholder} tokens.
+        location: Geographic location for date context.
+        timezone: IANA timezone for date resolution.
+        gt_url: Ground truth URL(s) for the car search.
+        url: Starting URL (default: /carsearch).
+        values: Placeholder values for date substitution.
+        timestamp: Optional fixed timestamp for reproducibility.
+
+    Returns:
+        BaseTaskConfig with eval_config targeting HotelsComCarUrlMatch.
+    """
+    if not gt_url:
+        raise ValueError("gt_url is required for car rental task config")
+
+    values = values or {}
+    user_metadata = initialize_user_metadata(timezone, location, timestamp)
+    resolved_placeholders, _ = initialize_placeholder_map(
+        user_metadata, values
+    )
+
+    rendered_task = render_task_statement(task, resolved_placeholders)
+
+    # Generate all GT URL combinations
+    all_gt_urls: list[str] = []
+
+    for template in gt_url:
+        placeholders_in_template = {
+            k: dates
+            for k, (_, dates) in resolved_placeholders.items()
+            if any(
+                token in template
+                for token in [
+                    f"{{{k}}}",
+                    f"{{{k}Day}}",
+                    f"{{{k}Month}}",
+                    f"{{{k}Year}}",
+                ]
+            )
+        }
+
+        if not placeholders_in_template:
+            all_gt_urls.append(template)
+            continue
+
+        keys = list(placeholders_in_template.keys())
+        date_lists = list(placeholders_in_template.values())
+
+        for combination in product(*date_lists):
+            rendered_u = template
+
+            for k, v in zip(keys, combination):
+                rendered_u = rendered_u.replace(f"{{{k}}}", v)
+
+                try:
+                    dt = datetime.strptime(v, "%Y-%m-%d")
+                    replacements = {
+                        f"{{{k}Day}}": str(dt.day),
+                        f"{{{k}Month}}": str(dt.month),
+                        f"{{{k}Year}}": str(dt.year),
+                    }
+                    for token, value in replacements.items():
+                        if token in rendered_u:
+                            rendered_u = rendered_u.replace(token, value)
+                except Exception:
+                    pass
+
+            all_gt_urls.append(rendered_u)
+
+    all_gt_urls = list(set(all_gt_urls))
+
+    eval_target = get_import_path(HotelsComCarUrlMatch)
+    eval_config = {"_target_": eval_target, "gt_url": all_gt_urls}
+
+    return BaseTaskConfig(
+        url=url,
+        task=rendered_task,
+        user_metadata=user_metadata,
+        eval_config=eval_config,
+    )
+
+
+
+# =============================================================================
 # STANDALONE DEMO
+
 # =============================================================================
 
 
