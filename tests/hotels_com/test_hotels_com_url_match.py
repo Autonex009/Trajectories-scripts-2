@@ -199,6 +199,12 @@ class TestUrlParsing:
         r = parse_hotels_com_url(url)
         assert r["amenities"] == ["POOL", "WIFI"]
 
+    def test_amenities_repeated_params(self):
+        """Hotels.com generates amenities=PETS&amenities=WIFI (repeated params)."""
+        url = f"{BASE}?amenities=PETS&amenities=WIFI"
+        r = parse_hotels_com_url(url)
+        assert r["amenities"] == ["PETS", "WIFI"]
+
     def test_guest_rating_parsed(self):
         url = f"{BASE}?f-guest-rating=8"
         r = parse_hotels_com_url(url)
@@ -335,6 +341,20 @@ class TestMismatches:
         match, _ = _match(agent, gt)
         assert match is False
 
+    def test_amenities_repeated_params_vs_comma_separated(self):
+        """GT uses comma-separated, agent uses repeated params — must match."""
+        gt = f"{BASE}?f-amenities=PETS,WIFI"
+        agent = f"{BASE}?amenities=PETS&amenities=WIFI"
+        match, _ = _match(agent, gt)
+        assert match is True
+
+    def test_amenities_repeated_params_match(self):
+        """Both GT and agent use repeated params."""
+        gt = f"{BASE}?amenities=PETS&amenities=WIFI"
+        agent = f"{BASE}?amenities=PETS&amenities=WIFI"
+        match, _ = _match(agent, gt)
+        assert match is True
+
     def test_guest_rating_mismatch(self):
         gt = f"{BASE}?f-guest-rating=8"
         agent = f"{BASE}?f-guest-rating=7"
@@ -389,6 +409,34 @@ class TestMatchingTolerance:
         agent = f"{BASE}?destination=Paris&f-star-rating=5&f-amenities=WIFI"
         match, _ = _match(agent, gt)
         assert match is True
+
+    def test_agent_with_auto_generated_params(self):
+        """Real-world scenario: agent URL has many extra params Hotels.com
+        auto-generates during search execution (regionId, typeaheadCollationId,
+        useRewards, etc.). These should NOT cause false negatives."""
+        gt = (
+            f"{BASE}?destination=London%2C%20England%2C%20United%20Kingdom"
+            "&startDate=2026-06-22&endDate=2026-06-24"
+            "&adults=2&rooms=1"
+            "&paymentType=FREE_CANCELLATION"
+            "&amenities=PETS&amenities=WIFI"
+        )
+        agent = (
+            f"{BASE}?destination=London%2C%20England%2C%20United%20Kingdom"
+            "&flexibility=0_DAY"
+            "&d1=2026-06-22&startDate=2026-06-22"
+            "&d2=2026-06-24&endDate=2026-06-24"
+            "&adults=2&rooms=1"
+            "&typeaheadCollationId=0aee3924-0e1d-43fb-957d-1ef5743bfdcb"
+            "&regionId=2114"
+            "&sort=RECOMMENDED"
+            "&theme=&userIntent=&semdtl="
+            "&categorySearch=&useRewards=false"
+            "&amenities=PETS&amenities=WIFI"
+            "&paymentType=FREE_CANCELLATION"
+        )
+        match, details = _match(agent, gt)
+        assert match is True, f"False negative! Mismatches: {details.get('mismatches')}"
 
     def test_sort_alias_match(self):
         """Sort aliases should be normalized for comparison."""
