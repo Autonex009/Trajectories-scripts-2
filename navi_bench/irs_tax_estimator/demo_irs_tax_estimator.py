@@ -323,8 +323,8 @@ async def run_live_demo(csv_path: str | None = None):
 
     # ---- Load tasks from CSV ----
     if csv_path is None:
-        # Try team.csv first, then benchmark CSV
-        team_csv = Path(__file__).parent / "team.csv"
+        # Try irs_five_sample_tasks.csv first, then benchmark CSV
+        team_csv = Path(__file__).parent / "irs_five_sample_tasks.csv"
         bench_csv = Path(__file__).parent / "irs_tax_estimator_benchmark_tasks.csv"
         if team_csv.exists():
             csv_path = str(team_csv)
@@ -572,9 +572,9 @@ def main():
 
     Usage:
       python demo_irs_tax_estimator.py                     # Built-in demo
-      python demo_irs_tax_estimator.py --live               # Live browser (uses team.csv)
+      python demo_irs_tax_estimator.py --live               # Live browser (uses irs_five_sample_tasks.csv)
       python demo_irs_tax_estimator.py --live --csv t.csv   # Live browser with specific CSV
-      python demo_irs_tax_estimator.py --csv team.csv       # CSV verification (no browser)
+      python demo_irs_tax_estimator.py --csv tasks.csv      # CSV verification (no browser)
     """
     if "--live" in sys.argv:
         csv_path = None
@@ -588,7 +588,7 @@ def main():
         if idx + 1 < len(sys.argv):
             csv_path = sys.argv[idx + 1]
         else:
-            csv_path = str(Path(__file__).parent / "team.csv")
+            csv_path = str(Path(__file__).parent / "irs_five_sample_tasks.csv")
         asyncio.run(run_csv_demo(csv_path))
     else:
         asyncio.run(run_demo())
