@@ -279,8 +279,12 @@ async def run_csv_demo(csv_path: str):
                 passed += 1
             else:
                 print(f"  ❌ {task_id}: FAIL (score={result.score})")
-                print(f"     Missing: {result.missing_fields[:5]}")
-                print(f"     Wrong:   {result.wrong_fields[:5]}")
+                if result.missing_fields:
+                    print(f"     Missing: {result.missing_fields[:5]}")
+                if result.wrong_fields:
+                    print(f"     Wrong:   {result.wrong_fields[:5]}")
+                if result.extra_fields:
+                    print(f"     Extra:   {result.extra_fields[:5]}")
                 failed += 1
                 errors.append(task_id)
 
@@ -532,6 +536,8 @@ async def run_live_demo(csv_path: str | None = None):
             print(f"  Missing fields: {final_result.missing_fields}")
         if final_result.wrong_fields:
             print(f"  Wrong fields:   {final_result.wrong_fields}")
+        if final_result.extra_fields:
+            print(f"  Extra fields:   {final_result.extra_fields}")
         print("=" * 70)
 
         results.append({"task_id": task_id, "score": final_result.score})

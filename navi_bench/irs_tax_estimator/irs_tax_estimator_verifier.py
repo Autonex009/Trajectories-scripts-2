@@ -390,16 +390,17 @@ def _compare_field(field_name: str, gt_value: Any, agent_value: Any) -> tuple[bo
     return False, f"Value mismatch: expected {gt_str!r}, got {agent_str!r}"
 
 
-def _compare_object(gt_obj: dict, agent_obj: dict, prefix: str = "") -> tuple[int, int, list[str], list[str]]:
+def _compare_object(gt_obj: dict, agent_obj: dict, prefix: str = "") -> tuple[int, int, list[str], list[str], list[str]]:
     """Compare two flat objects (dicts) field by field.
 
     Returns:
-        (matched_count, total_gt_fields, wrong_fields, missing_fields)
+        (matched_count, total_gt_fields, wrong_fields, missing_fields, extra_fields)
     """
     matched = 0
     total = 0
     wrong = []
     missing = []
+    extra = []
 
     for field_name, gt_value in gt_obj.items():
         # Skip array sub-fields (handled recursively)
@@ -420,28 +421,46 @@ def _compare_object(gt_obj: dict, agent_obj: dict, prefix: str = "") -> tuple[in
         else:
             wrong.append(f"{full_name}: {detail}")
 
-    return matched, total, wrong, missing
+    # Detect extra fields in agent that are not in ground truth
+    for field_name, agent_value in agent_obj.items():
+        if field_name in ARRAY_FIELDS:
+            continue
+        if field_name not in gt_obj:
+            full_name = f"{prefix}{field_name}" if prefix else field_name
+            if not _is_empty_value(agent_value):
+                extra.append(f"{full_name}={agent_value!r}")
+
+    return matched, total, wrong, missing, extra
 
 
 def _compare_array_field(
     field_name: str,
     gt_array: list[dict],
     agent_array: list[dict],
-) -> tuple[int, int, list[str], list[str]]:
+) -> tuple[int, int, list[str], list[str], list[str]]:
     """Compare two arrays of objects by order (index-matched).
 
     Returns:
-        (matched_count, total_gt_fields, wrong_fields, missing_fields)
+        (matched_count, total_gt_fields, wrong_fields, missing_fields, extra_fields)
     """
     total_matched = 0
     total_fields = 0
     all_wrong = []
     all_missing = []
+    all_extra = []
 
     if len(agent_array) < len(gt_array):
         all_missing.append(
             f"{field_name}: expected {len(gt_array)} entries, got {len(agent_array)}"
         )
+
+    # Flag extra array entries beyond GT length
+    if len(agent_array) > len(gt_array):
+        for i in range(len(gt_array), len(agent_array)):
+            agent_entry = agent_array[i]
+            for k, v in agent_entry.items():
+                if k not in ARRAY_FIELDS and not _is_empty_value(v):
+                    all_extra.append(f"{field_name}[{i}].{k}={v!r}")
 
     for i, gt_entry in enumerate(gt_array):
         if i >= len(agent_array):
@@ -453,15 +472,16 @@ def _compare_array_field(
             continue
 
         agent_entry = agent_array[i]
-        m, t, w, mi = _compare_object(
+        m, t, w, mi, ex = _compare_object(
             gt_entry, agent_entry, prefix=f"{field_name}[{i}]."
         )
         total_matched += m
         total_fields += t
         all_wrong.extend(w)
         all_missing.extend(mi)
+        all_extra.extend(ex)
 
-    return total_matched, total_fields, all_wrong, all_missing
+    return total_matched, total_fields, all_wrong, all_missing, all_extra
 
 
 # =============================================================================
@@ -681,12 +701,13 @@ class IrsTweQueryMatch(BaseMetric):
 
             agent_query = agent_queries[qi]
 
-            # Compare flat fields
-            m, t, w, mi = _compare_object(gt_query, agent_query, prefix=f"q{qi}.")
+            # Compare flat fields (now returns extras too)
+            m, t, w, mi, ex = _compare_object(gt_query, agent_query, prefix=f"q{qi}.")
             total_matched += m
             total_fields += t
             all_wrong.extend(w)
             all_missing.extend(mi)
+            all_extra.extend(ex)
 
             # Compare array fields (jobs, pensions, self_employment, ssi)
             for array_field in ARRAY_FIELDS:
@@ -698,32 +719,41 @@ class IrsTweQueryMatch(BaseMetric):
                     if not isinstance(agent_arr, list):
                         agent_arr = []
 
-                    am, at, aw, ami = _compare_array_field(
+                    am, at, aw, ami, aex = _compare_array_field(
                         f"q{qi}.{array_field}", gt_arr, agent_arr
                     )
                     total_matched += am
                     total_fields += at
                     all_wrong.extend(aw)
                     all_missing.extend(ami)
+                    all_extra.extend(aex)
 
-            # Check for extra fields (lenient — only flag if non-empty)
-            for field_name, agent_value in agent_query.items():
-                if field_name in ARRAY_FIELDS:
-                    continue
-                if field_name not in gt_query:
-                    if not _is_empty_value(agent_value):
-                        all_extra.append(
-                            f"q{qi}.{field_name}={agent_value!r} (extra, non-empty)"
-                        )
-                    # Empty extras are silently ignored per Mustafa's rule
+                # Detect extra array fields in agent that are not in GT
+                elif array_field in agent_query:
+                    agent_arr = agent_query[array_field]
+                    if isinstance(agent_arr, dict):
+                        agent_arr = [agent_arr]
+                    if isinstance(agent_arr, list) and len(agent_arr) > 0:
+                        for i, entry in enumerate(agent_arr):
+                            if isinstance(entry, dict):
+                                for k, v in entry.items():
+                                    if k not in ARRAY_FIELDS and not _is_empty_value(v):
+                                        all_extra.append(
+                                            f"q{qi}.{array_field}[{i}].{k}={v!r}"
+                                        )
 
         # Calculate score
         if total_fields == 0:
             score = 1.0
             match = True
         else:
-            # Binary: all fields must match
-            match = total_matched == total_fields and len(all_wrong) == 0 and len(all_missing) == 0
+            # Binary: all fields must match AND no extra non-empty fields
+            match = (
+                total_matched == total_fields
+                and len(all_wrong) == 0
+                and len(all_missing) == 0
+                and len(all_extra) == 0
+            )
             score = 1.0 if match else 0.0
 
         # Build detail string

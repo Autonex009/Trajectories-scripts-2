@@ -356,9 +356,9 @@ class TestLenientEmptyHandling:
 
         await simple_verifier.update(queries=agent)
         result = await simple_verifier.compute_detailed()
-        # Extra non-zero fields don't actually fail (only GT fields compared)
-        # So this should still pass — the verifier only checks GT fields
-        assert result.score == 1.0
+        # Extra non-zero fields should cause failure
+        assert result.score == 0.0
+        assert len(result.extra_fields) > 0
 
 
 # =============================================================================
