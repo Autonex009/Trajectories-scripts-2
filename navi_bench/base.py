@@ -235,10 +235,10 @@ class DatasetItem(BaseModel):
     domain: str = Field(description="Website domain: e.g., expedia, google_flights")
     l1_category: str = Field(
         description=(
-            "Task first-level category / sector: realestate | food | e_commerce | social | travel. "
+            "Task first-level category / sector: realestate | food | e_commerce | social | travel | form. "
             "Use underscore instead of hyphen."
         ),
-        pattern=r"^realestate|food|e_commerce|social|travel$",
+        pattern=r"^realestate|food|e_commerce|social|travel|form$",
     )
     l2_category: str | None = Field(
         description=(
