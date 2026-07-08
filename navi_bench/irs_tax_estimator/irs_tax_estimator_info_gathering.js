@@ -141,6 +141,7 @@
     '/royaltyIncome': 'royalty_income',
     '/sCorpNonPassiveIncome': 'non_passive_income',
     '/nonRentalRoyaltyScheduleEIncome': 'passive_income',
+    '/sCorpPassiveIncome': 'passive_income',
     '/nonSpecificOtherIncome': 'other_taxable_income',
     '/otherIncomeWithholding': 'other_taxable_withholding',
     '/unemploymentIncome': 'gross_unemployment_income',
@@ -151,6 +152,7 @@
     '/educatorExpensesAdjustment': 'educator_expenses',
     '/alimonyPaid': 'alimony_paid',
     '/penaltyForEarlySavingsWithdrawal': 'early_withdrawal_penalty',
+    '/movingExpensesForArmedServicesMembers': 'moving_expenses',
     '/selfEmploymentHealthInsuranceContributions': 'se_health_insurance_premiums',
     '/selfEmploymentRetirementPlanContributions': 'se_retirement_contributions',
     '/hsaContributionAmount': 'hsa_deduction',
@@ -164,6 +166,7 @@
     '/qualifiedMortgageInsurancePremiums': 'mortgage_insurance',
     '/medicalAndDentalExpenses': 'medical_expenses',
     '/otherDeductionsTotal': 'medical_expenses',
+    '/casualtyLossesTotal': 'casualty_losses',
     // Mortgage interest — verified real path from sessionStorage (July 2026)
     '/qualifiedMortgageInterestAndInvestmentInterestExpenses': 'mortgage_interest',
     '/qualifiedMortgageInterest': 'mortgage_interest',
@@ -188,13 +191,18 @@
     '/flowIsEligibleForEDC': 'elderly_disabled_credit',
     '/elderlyAndDisabledTaxCreditAmount': 'elderly_disabled_credit',
     '/businessCreditsForEligible': 'business_credit',
+    '/schedule3Line1': 'foreign_tax_credit',
     '/schedule3Line2': 'foreign_tax_credit',
     '/schedule3Line6b': 'mortgage_interest_credit',
     '/odcEligibleDependents': 'odc_number_of_dependants',
     '/flowShouldAskWhetherPrimaryFilerAge25OrOlderForEitc': 'eitc_25_year_old',
+    '/schedule3Line6a': 'retirement_savings_credit',
     '/schedule3Line6z': 'retirement_savings_credit',
+    '/retirementSavingsContributionsTaxCreditAmount': 'retirement_savings_credit',
     '/adjustmentsToIncomeExcludingStudentLoanInterest': 'adoption_expenses',
     '/maxSchedule3Line6g': 'amt_credit',
+    '/tentativeSchedule3Line6g': 'amt_credit',
+    '/alternativeMinimumTaxCreditAmount': 'amt_credit',
     // Senior deduction
     '/couldEitherTaxpayerBeEligibleForSeniorDeduction': 'additional_senior_deduction',
     '/secondaryTaxpayerElectsForSeniorDeduction': 'spouse_additional_senior_deduction',
@@ -226,8 +234,11 @@
     // Year-to-date withholding (WRITABLE Dollar)
     'yearToDateWithholding':                 'fed_withholding_ytd',
     // Variable pay paystubs (WRITABLE Dollar)
+    'pastPaycheckIncome1':                   'gross_per_period',
     'pastPaycheckIncome2':                   'second_gross_per_period',
     'pastPaycheckIncome3':                   'third_gross_per_period',
+    // Variable pay indicator (WRITABLE Boolean — false = variable pay)
+    'consistentPay':                         'pay_is_variable_raw',
     // Bonus (WRITABLE)
     'mostRecentPayPeriodHasBonus':           'received_bonus',
     'mostRecentPayPeriodBonusAmount':        'bonus_this_period',
@@ -389,8 +400,11 @@
       var mappedItem = {};
 
       Object.keys(fieldMap).forEach(function (factField) {
-        if (rawItem[factField] !== undefined) {
-          mappedItem[fieldMap[factField]] = rawItem[factField];
+        var foundKey = Object.keys(rawItem).find(function(k) {
+          return k === factField || k.split('/').pop() === factField;
+        });
+        if (foundKey && rawItem[foundKey] !== undefined) {
+          mappedItem[fieldMap[factField]] = rawItem[foundKey];
         }
       });
 
@@ -461,11 +475,15 @@
       job.end_date = isoToMmDdYyyy(job.end_date);
     }
 
-    // pay_is_variable: expectedFuturePayPerHour presence indicates hourly/variable
+    // pay_is_variable: from consistentPay (false = variable) or expectedFuturePayPerHour
     if (job.pay_is_variable_raw !== undefined) {
+      var pvRaw = job.pay_is_variable_raw;
       delete job.pay_is_variable_raw;
-      // Variable pay is determined by having multiple paystubs
-      if (job.second_gross_per_period !== undefined || job.third_gross_per_period !== undefined) {
+      if (typeof pvRaw === 'boolean') {
+        // consistentPay: false means variable pay, true means consistent
+        job.pay_is_variable = !pvRaw;
+      } else if (job.second_gross_per_period !== undefined || job.third_gross_per_period !== undefined) {
+        // Fallback: variable pay indicated by having multiple paystubs
         job.pay_is_variable = true;
       }
     }
