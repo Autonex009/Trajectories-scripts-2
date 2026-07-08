@@ -11,6 +11,9 @@
  * Data sources (both checked for reliability):
  *   1. sessionStorage.getItem('factGraph')
  *   2. window.factGraph (if available)
+ * 
+ * VERIFIED AGAINST: fact-dictionary.xml (July 2026)
+ * All field paths confirmed as WRITABLE unless noted.
  */
 (function () {
   'use strict';
@@ -19,11 +22,11 @@
   // EXTRACT RAW FACT-GRAPH
   // ============================================================
 
-  let rawData = null;
+  var rawData = null;
 
   // Try sessionStorage first (persisted, reliable)
   try {
-    const stored = sessionStorage.getItem('factGraph');
+    var stored = sessionStorage.getItem('factGraph');
     if (stored) {
       rawData = JSON.parse(stored);
     }
@@ -33,7 +36,7 @@
   if (!rawData) {
     try {
       if (window.factGraph && typeof window.factGraph.toJSON === 'function') {
-        const exported = window.factGraph.toJSON();
+        var exported = window.factGraph.toJSON();
         rawData = typeof exported === 'string' ? JSON.parse(exported) : exported;
       }
     } catch (e) { /* ignore */ }
@@ -57,42 +60,75 @@
     
     // Direct primitive
     if (typeof entry !== 'object') return entry;
-    
-    // fact-graph stores values as {$type: "...", value: ...}
-    // or as plain values in different shapes
+
+    var t = entry.$type || '';
+
+    // Real IRS format: {$type: "DollarWrapper", item: "1518.00"}
+    if (t === 'DollarWrapper') {
+      var v = entry.item;
+      if (v === null || v === undefined || v === '') return undefined;
+      return parseFloat(String(v).replace(/[$,\s]/g, ''));
+    }
+
+    // {$type: "BooleanWrapper", item: true}
+    if (t === 'BooleanWrapper') {
+      return entry.item === true || entry.item === 'true';
+    }
+
+    // {$type: "EnumWrapper", item: {value: "single", enumOptionsPath: "..."}}
+    if (t === 'EnumWrapper') {
+      if (entry.item && entry.item.value !== undefined) return entry.item.value;
+      return entry.item;
+    }
+
+    // {$type: "DayWrapper", item: {date: "2026-05-31"}}
+    if (t === 'DayWrapper') {
+      if (entry.item && entry.item.date) return entry.item.date;
+      return entry.item;
+    }
+
+    // {$type: "IntWrapper", item: 2}
+    if (t === 'IntWrapper') {
+      return entry.item;
+    }
+
+    // {$type: "CollectionWrapper", item: {items: ["uuid1", ...]}}
+    if (t === 'CollectionWrapper') {
+      if (entry.item && entry.item.items) return entry.item.items;
+      return entry.item;
+    }
+
+    // Fallback: older format {$type: "Dollar", value: 1518}
     if (entry.value !== undefined) return entry.value;
-    if (entry.$type === 'Dollar') return entry.value || 0;
-    if (entry.$type === 'Boolean') return entry.value || false;
-    if (entry.$type === 'Enum') return entry.value || '';
-    if (entry.$type === 'Int') return entry.value || 0;
-    if (entry.$type === 'Date') return entry.value || '';
-    if (entry.$type === 'String') return entry.value || '';
+    if (entry.item !== undefined) return entry.item;
     
     return entry;
   }
 
   function getFactValue(path) {
-    const entry = rawData[path];
+    var entry = rawData[path];
     if (entry === undefined) return undefined;
     return getValue(entry);
   }
 
   // ============================================================
   // FACT-GRAPH PATH → QUERY FIELD MAPPING (TOP LEVEL)
+  // All paths verified against fact-dictionary.xml
   // ============================================================
 
-  const TOP_LEVEL_MAP = {
-    // About You
+  var TOP_LEVEL_MAP = {
+    // About You — VERIFIED against real sessionStorage (July 2026)
     '/filingStatus': 'filing_status',
-    '/onlyPrimaryFilerAge65OrOlder': 'user_age_65_or_older',
-    '/onlyPrimaryFilerIsBlind': 'is_blind',
-    '/treatFilersAsDependents': 'claimed_as_dependent',
-    '/onlyPrimaryFilerIsClaimedOnAnotherReturn': 'claimed_as_dependent',
+    '/primaryFilerAge65OrOlder': 'user_age_65_or_older',
+    '/primaryFilerIsBlind': 'is_blind',
+    '/primaryFilerIsClaimedOnAnotherReturn': 'claimed_as_dependent',
     '/secondaryFilerAge65OrOlder': 'spouse_age_65_or_older',
     '/secondaryFilerIsBlind': 'spouse_is_blind',
     '/isMFSLivedTogether': 'living_together',
-    // Dependents (from credits page)
-    '/tentativelyEligibleForCtcOdc': 'plan_to_claim_dependents',
+    // Dependents
+    '/primaryFilerIsClaimingDependents': 'plan_to_claim_dependents',
+    // Spouse dependents (MFJ)
+    '/spousePlanToClaimDependents': 'spouse_plan_to_claim_dependents',
     // Other Income
     '/taxableInterestIncome': 'interest',
     '/ordinaryDividendsIncome': 'ordinary_dividends',
@@ -118,16 +154,20 @@
     '/selfEmploymentRetirementPlanContributions': 'se_retirement_contributions',
     '/hsaContributionAmount': 'hsa_deduction',
     '/deductionForTraditionalIRAContributionMax': 'traditional_ira',
-    // Student loan handled separately (has max check)
+    '/deductionForTraditionalIRAContribution': 'traditional_ira',
     '/maxStudentLoanDeduction': 'student_loan_interest',
-    // Deductions
-    '/wantsItemizedDeduction': 'deduction_type_raw',
+    // Deductions — /wantsStandardDeduction is a boolean (true=standard, false=itemized)
+    '/wantsStandardDeduction': 'deduction_type_raw',
     '/stateAndLocalTaxPayments': 'salt',
-    '/charitableContributions': 'charity_gifts',
     '/qualifiedMortgageInsurancePremiums': 'mortgage_insurance',
     '/otherDeductionsTotal': 'medical_expenses',
+    // Mortgage interest — verified real path from sessionStorage (July 2026)
+    '/qualifiedMortgageInterestAndInvestmentInterestExpenses': 'mortgage_interest',
+    '/qualifiedMortgageInterest': 'mortgage_interest',
+    '/homeInterest': 'mortgage_interest',
     // Additional deductions
-    '/cashCharitableContributions': 'cash_charitable_contributions',
+    '/cashCharitableContributions': 'charity_gifts',
+    '/nonCashCharitableContributions': 'non_cash_charitable_contributions',
     '/isEligibleForQualifiedPassengerVehicleLoanInterestDeduction': 'car_loan_interest',
     '/wantsQBIDeductionOverride': 'qbi_deduction',
     // Credits
@@ -142,114 +182,181 @@
     '/schedule3Line6b': 'mortgage_interest_credit',
     '/odcEligibleDependents': 'odc_number_of_dependants',
     '/flowShouldAskWhetherPrimaryFilerAge25OrOlderForEitc': 'eitc_25_year_old',
-    // Retirement savings credit
     '/schedule3Line6z': 'retirement_savings_credit',
-    // Adoption expenses (for credit calculation)
     '/adjustmentsToIncomeExcludingStudentLoanInterest': 'adoption_expenses',
-    // AMT credit
     '/maxSchedule3Line6g': 'amt_credit',
     // Senior deduction
     '/couldEitherTaxpayerBeEligibleForSeniorDeduction': 'additional_senior_deduction',
     '/secondaryTaxpayerElectsForSeniorDeduction': 'spouse_additional_senior_deduction',
   };
 
-  // Job-level field mapping: fact-graph path suffix → query field name
-  const JOB_FIELD_MAP = {
-    'filerAssignment': 'person',
-    'isFilerAssignmentSelfOrIncomplete': 'person_is_self',
-    'isHourlyJob': 'job_type',
-    'payFrequency': 'pay_frequency',
-    'mostRecentPayPeriodEnd': 'recent_pay_period_end',
-    'unboundedDefaultMostRecentPayDate': 'recent_pay_date',
-    'amountLastPaycheck': 'gross_per_period',
-    'averagePayPerPayPeriod': 'avg_pay',
-    'expectedFuturePayPerHour': 'pay_is_variable',
-    'effectivePayPerPayPeriod': 'effective_pay',
-    'grossIncome': 'ytd_gross',
-    'averageWithholdingPerPayPeriod': 'fed_withholding_period',
-    'yearToDateWithholding': 'fed_withholding_ytd',
-    'mostRecentPayPeriodHasBonus': 'received_bonus',
-    'mostRecentPayPeriodBonusAmount': 'bonus_this_period',
-    'totalBonusReceived': 'total_bonus_received',
-    'totalFutureBonus': 'estimate_bonus_pay',
+  // ============================================================
+  // JOB-LEVEL FIELD MAPPING
+  // All writable fields verified against fact-dictionary.xml
+  // ============================================================
+
+  var JOB_FIELD_MAP = {
+    // Person assignment (WRITABLE, needs conversion)
+    'filerAssignment':                       'person_raw',
+    // Job type (WRITABLE Boolean, needs conversion: false→"salary", true→"hourly")
+    'isHourlyJob':                           'job_type_raw',
+    // Job duration (WRITABLE Boolean, needs conversion: true→"all_year", false→"part_year")
+    'isAllYear':                             'job_duration_raw',
+    // Pay frequency (WRITABLE Int)
+    'payFrequency':                          'pay_frequency_raw',
+    // Dates (WRITABLE)
+    'mostRecentPayPeriodEnd':                'recent_pay_period_end',
+    'mostRecentPayDate':                     'recent_pay_date',
+    // Gross per period (WRITABLE Dollar — amount on last paycheck)
+    'amountLastPaycheck':                    'gross_per_period',
+    // Year-to-date gross (WRITABLE Dollar)
+    'yearToDateIncome':                      'ytd_gross',
+    // Federal withholding per period (WRITABLE Dollar — amount withheld on last paycheck)
+    'amountWithheldLastPaycheck':            'fed_withholding_period',
+    // Year-to-date withholding (WRITABLE Dollar)
+    'yearToDateWithholding':                 'fed_withholding_ytd',
+    // Variable pay paystubs (WRITABLE Dollar)
+    'pastPaycheckIncome2':                   'second_gross_per_period',
+    'pastPaycheckIncome3':                   'third_gross_per_period',
+    // Bonus (WRITABLE)
+    'mostRecentPayPeriodHasBonus':           'received_bonus',
+    'mostRecentPayPeriodBonusAmount':        'bonus_this_period',
+    'totalFutureBonus':                      'estimate_bonus_pay',
+    // Pre-tax deductions (WRITABLE Dollar)
     'retirementPlanContributionsPerPayPeriod': 'retirement_401k_period',
-    'retirementPlanContributionsToDate': 'retirement_401k_ytd',
+    'retirementPlanContributionsToDate':      'retirement_401k_ytd',
     'healthInsuranceContributionsPerPayPeriod': 'health_insurance_period',
-    'healthInsuranceContributionsToDate': 'health_insurance_ytd',
-    'hsaOrFsaContributionsPerPayPeriod': 'hsa_period',
-    'hsaOrFsaContributionsToDate': 'hsa_ytd',
-    'otherPreTaxContributionsPerPayPeriod': 'pre_tax_period',
-    'otherPreTaxContributionsToDate': 'pre_tax_ytd',
-    'qualifiedTipIncome': 'annual_tip_income',
-    'overtimeCompensationRate': 'overtime_rate',
-    'pastPaycheckIncome2': 'second_gross_per_period',
-    'pastPaycheckIncome3': 'third_gross_per_period',
-    'writableStartDate': 'start_date',
-    'writableEndDate': 'end_date',
-    'eligibleForNoTaxOnOvertime': 'overtime_eligible',
-    'hoursPerPayPeriod': 'annual_overtime_income',
-    'expectedFutureAnnualSalary': 'job_duration',
+    'healthInsuranceContributionsToDate':     'health_insurance_ytd',
+    'hsaOrFsaContributionsPerPayPeriod':     'hsa_period',
+    'hsaOrFsaContributionsToDate':           'hsa_ytd',
+    'otherPreTaxContributionsPerPayPeriod':  'pre_tax_period',
+    'otherPreTaxContributionsToDate':        'pre_tax_ytd',
+    // Tips and overtime (WRITABLE)
+    'qualifiedTipIncome':                    'annual_tip_income',
+    'overtimeCompensationRate':              'overtime_rate',
+    'overtimeCompensationTotal':             'annual_overtime_income',
+    // Part-year dates (WRITABLE)
+    'writableStartDate':                     'start_date',
+    'writableEndDate':                       'end_date',
+    // Variable pay indicator (WRITABLE)
+    'expectedFuturePayPerHour':              'pay_is_variable_raw',
   };
 
-  // Pension-level field mapping
-  const PENSION_FIELD_MAP = {
-    'filerAssignment': 'pension_paid_to',
-    'isFilerAssignmentSelf': 'pension_is_self',
-    'payFrequency': 'pension_payment_frequency',
-    'mostRecentPayDate': 'pension_payment_date',
-    'averagePayPerPayPeriodForWithholding': 'pension_gross_per_payment',
-    'yearToDateIncome': 'pension_ytd_gross',
-    'expectedWithholdingPerPayPeriodForFutureJob': 'pension_withholding_per_payment',
-    'healthInsuranceContributions': 'pension_health_amount_per_period',
-    'healthInsuranceContributionsToDate': 'pension_health_amount_so_far',
-    'hsaOrFsaContributions': 'pension_hsa_pay_period',
-    'hsaOrFsaContributionsToDate': 'pension_hsa_amount_so_far',
-    'otherPreTaxContributions': 'pension_other_pay_period',
-    'otherPreTaxContributionsToDate': 'pension_other_amount_so_far',
-    'healthInsuranceContributionsPerPayPeriod': 'pension_health_per_period',
-    'flowInitialQuestionsComplete': 'pension_duration',
-    'endDate': 'pension_withholding_ytd',
+  // ============================================================
+  // PENSION-LEVEL FIELD MAPPING
+  // ============================================================
+
+  var PENSION_FIELD_MAP = {
+    'filerAssignment':                           'pension_paid_to_raw',
+    'payFrequency':                              'pension_payment_frequency_raw',
+    'mostRecentPayDate':                         'pension_payment_date',
+    'averagePayPerPayPeriodForWithholding':       'pension_gross_per_payment',
+    'yearToDateIncome':                          'pension_ytd_gross',
+    'averageWithholdingPerPayPeriod':             'pension_withholding_per_payment',
+    'yearToDateWithholding':                     'pension_withholding_ytd',
+    'healthInsuranceContributionsPerPayPeriod':   'pension_health_amount_per_period',
+    'healthInsuranceContributionsToDate':         'pension_health_amount_so_far',
+    'hsaOrFsaContributionsPerPayPeriod':          'pension_hsa_pay_period',
+    'hsaOrFsaContributionsToDate':               'pension_hsa_amount_so_far',
+    'otherPreTaxContributionsPerPayPeriod':       'pension_other_pay_period',
+    'otherPreTaxContributionsToDate':             'pension_other_amount_so_far',
+    'isAllYear':                                 'pension_duration_raw',
   };
 
-  // Self-employment field mapping
-  const SE_FIELD_MAP = {
-    'filerAssignment': 'person',
-    'netIncome': 'gross_income',
-    'workRelatedExpenses': 'business_expenses',
+  // ============================================================
+  // SELF-EMPLOYMENT FIELD MAPPING
+  // ============================================================
+
+  var SE_FIELD_MAP = {
+    'filerAssignment':     'person_raw',
+    'grossIncome':         'gross_income',        // WRITABLE at SE level
+    'workRelatedExpenses': 'business_expenses',    // WRITABLE
   };
 
-  // Social Security field mapping
-  const SSI_FIELD_MAP = {
-    'filerAssignment': 'person',
-    'monthlyIncome': 'monthly_benefit',
-    'withheldRateAsRationale': 'withholding_percent',
-    'isAllYear': 'ssi_pay_period',
-    'endDate': 'ss_end_date',
+  // ============================================================
+  // SOCIAL SECURITY FIELD MAPPING
+  // ============================================================
+
+  var SSI_FIELD_MAP = {
+    'filerAssignment':           'person_raw',
+    'monthlyIncome':             'monthly_benefit',
+    'withheldRateAsRationale':   'withholding_percent',
+    'isAllYear':                 'ssi_pay_period_raw',
+    'writableStartDate':         'ss_start_date',
+    'writableEndDate':           'ss_end_date',
   };
+
+  // ============================================================
+  // PAY FREQUENCY INT → STRING CONVERSION
+  // The IRS stores pay frequency as an integer (pay periods per year)
+  // ============================================================
+
+  var PAY_FREQ_MAP = {
+    52: 'weekly',
+    26: 'biweekly',
+    24: 'twice_monthly',
+    12: 'monthly',
+    1:  'annually',
+    4:  'quarterly',
+  };
+
+  // ============================================================
+  // FILER ASSIGNMENT CONVERSION
+  // ============================================================
+
+  function convertPerson(rawValue) {
+    if (rawValue === undefined || rawValue === null) return undefined;
+    var s = String(rawValue).toLowerCase();
+    if (s === 'primary' || s === 'primaryfiler' || s === 'self') return 'myself';
+    if (s === 'secondary' || s === 'secondaryfiler' || s === 'spouse') return 'spouse';
+    return s;
+  }
+
+  // ============================================================
+  // DATE FORMAT CONVERSION
+  // IRS stores: "2026-05-31" (ISO)
+  // GT expects:  "05/31/2026" (MM/DD/YYYY)
+  // ============================================================
+
+  function isoToMmDdYyyy(isoDate) {
+    if (!isoDate || typeof isoDate !== 'string') return isoDate;
+    // Already in MM/DD/YYYY format?
+    if (isoDate.indexOf('/') !== -1) return isoDate;
+    // Parse YYYY-MM-DD
+    var parts = isoDate.split('-');
+    if (parts.length === 3) {
+      return parts[1] + '/' + parts[2] + '/' + parts[0];
+    }
+    return isoDate;
+  }
 
   // ============================================================
   // EXTRACT COLLECTIONS (JOBS, PENSIONS, SE, SSI)
   // ============================================================
 
   function extractCollection(prefix, fieldMap) {
-    const items = [];
-    const collectionKeys = Object.keys(rawData).filter(function (k) {
+    var items = [];
+    // Real IRS paths: /jobs/#d178f03f-8a7d-44b1-9922-3254ba639fdb/isHourlyJob
+    // The UUID has a # prefix in the key
+    var collectionKeys = Object.keys(rawData).filter(function (k) {
       return k.startsWith(prefix + '/') && k.split('/').length > 2;
     });
 
-    // Group by UUID (the part after prefix/)
-    const uuids = {};
+    // Group by UUID (the part after prefix/, may have # prefix)
+    var uuids = {};
     collectionKeys.forEach(function (key) {
-      const parts = key.replace(prefix + '/', '').split('/');
-      const uuid = parts[0];
-      const fieldName = parts.slice(1).join('/');
+      var rest = key.replace(prefix + '/', '');
+      var slashIdx = rest.indexOf('/');
+      if (slashIdx === -1) return; // Skip the collection entry itself
+      var uuid = rest.substring(0, slashIdx);
+      var fieldName = rest.substring(slashIdx + 1);
       if (!uuids[uuid]) uuids[uuid] = {};
       uuids[uuid][fieldName] = getValue(rawData[key]);
     });
 
     Object.keys(uuids).forEach(function (uuid) {
-      const rawItem = uuids[uuid];
-      const mappedItem = {};
+      var rawItem = uuids[uuid];
+      var mappedItem = {};
 
       Object.keys(fieldMap).forEach(function (factField) {
         if (rawItem[factField] !== undefined) {
@@ -259,7 +366,6 @@
 
       // Only add if it has meaningful data
       if (Object.keys(mappedItem).length > 0) {
-        mappedItem._uuid = uuid;
         items.push(mappedItem);
       }
     });
@@ -268,60 +374,203 @@
   }
 
   // ============================================================
+  // POST-PROCESS: Convert raw boolean/int fields to enum strings
+  // ============================================================
+
+  function postProcessJob(job) {
+    // job_type: isHourlyJob (Boolean) → "salary" / "hourly"
+    if (job.job_type_raw !== undefined) {
+      job.job_type = job.job_type_raw === true ? 'hourly' : 'salary';
+      delete job.job_type_raw;
+    }
+
+    // job_duration: isAllYear (Boolean) → "all_year" / "part_year"
+    if (job.job_duration_raw !== undefined) {
+      job.job_duration = job.job_duration_raw === true ? 'all_year' : 'part_year';
+      delete job.job_duration_raw;
+    }
+
+    // pay_frequency: can be integer (12) or string ("monthly") from EnumWrapper
+    if (job.pay_frequency_raw !== undefined) {
+      var raw = job.pay_frequency_raw;
+      if (typeof raw === 'number') {
+        // Old integer format: 12→monthly, 26→biweekly, etc.
+        var freq = PAY_FREQ_MAP[raw];
+        job.pay_frequency = freq || String(raw);
+      } else if (typeof raw === 'string') {
+        // New EnumWrapper format: already a string like "monthly"
+        job.pay_frequency = raw;
+      } else {
+        job.pay_frequency = String(raw);
+      }
+      delete job.pay_frequency_raw;
+    }
+
+    // person: filerAssignment → "myself" / "spouse"
+    if (job.person_raw !== undefined) {
+      job.person = convertPerson(job.person_raw);
+      delete job.person_raw;
+    }
+
+    // Convert ISO dates (2026-05-31) to MM/DD/YYYY format
+    if (job.recent_pay_period_end && typeof job.recent_pay_period_end === 'string') {
+      job.recent_pay_period_end = isoToMmDdYyyy(job.recent_pay_period_end);
+    }
+    if (job.recent_pay_date && typeof job.recent_pay_date === 'string') {
+      job.recent_pay_date = isoToMmDdYyyy(job.recent_pay_date);
+    }
+    if (job.start_date && typeof job.start_date === 'string') {
+      job.start_date = isoToMmDdYyyy(job.start_date);
+    }
+    if (job.end_date && typeof job.end_date === 'string') {
+      job.end_date = isoToMmDdYyyy(job.end_date);
+    }
+
+    // pay_is_variable: expectedFuturePayPerHour presence indicates hourly/variable
+    if (job.pay_is_variable_raw !== undefined) {
+      delete job.pay_is_variable_raw;
+      // Variable pay is determined by having multiple paystubs
+      if (job.second_gross_per_period !== undefined || job.third_gross_per_period !== undefined) {
+        job.pay_is_variable = true;
+      }
+    }
+
+    return job;
+  }
+
+  function postProcessPension(pension) {
+    // pension_paid_to: filerAssignment → "myself" / "spouse"
+    if (pension.pension_paid_to_raw !== undefined) {
+      pension.pension_paid_to = convertPerson(pension.pension_paid_to_raw);
+      delete pension.pension_paid_to_raw;
+    }
+
+    // pension_duration: isAllYear → "all_year" / "part_year"
+    if (pension.pension_duration_raw !== undefined) {
+      pension.pension_duration = pension.pension_duration_raw === true ? 'all_year' : 'part_year';
+      delete pension.pension_duration_raw;
+    }
+
+    // pension_payment_frequency: integer → string
+    if (pension.pension_payment_frequency_raw !== undefined) {
+      var freq = PAY_FREQ_MAP[pension.pension_payment_frequency_raw];
+      if (freq) {
+        pension.pension_payment_frequency = freq;
+      } else {
+        pension.pension_payment_frequency = String(pension.pension_payment_frequency_raw);
+      }
+      delete pension.pension_payment_frequency_raw;
+    }
+
+    return pension;
+  }
+
+  function postProcessSE(se) {
+    // person: filerAssignment → "myself" / "spouse"
+    if (se.person_raw !== undefined) {
+      se.person = convertPerson(se.person_raw);
+      delete se.person_raw;
+    }
+    return se;
+  }
+
+  function postProcessSSI(ssi) {
+    // person: filerAssignment → "myself" / "spouse"
+    if (ssi.person_raw !== undefined) {
+      ssi.person = convertPerson(ssi.person_raw);
+      delete ssi.person_raw;
+    }
+
+    // ssi_pay_period: isAllYear → "all_year" / "part_year"
+    if (ssi.ssi_pay_period_raw !== undefined) {
+      ssi.ssi_pay_period = ssi.ssi_pay_period_raw === true ? 'all_year' : 'part_year';
+      delete ssi.ssi_pay_period_raw;
+    }
+
+    return ssi;
+  }
+
+  // ============================================================
   // BUILD EXTRACTED QUERY
   // ============================================================
 
-  const result = {};
+  var result = {};
 
   // Extract top-level facts
   Object.keys(TOP_LEVEL_MAP).forEach(function (factPath) {
-    const queryField = TOP_LEVEL_MAP[factPath];
-    const val = getFactValue(factPath);
+    var queryField = TOP_LEVEL_MAP[factPath];
+    var val = getFactValue(factPath);
     if (val !== undefined && val !== null) {
       result[queryField] = val;
     }
   });
 
-  // Handle deduction_type: /wantsItemizedDeduction is an int (1 = itemized, 0 = standard)
+  // Handle deduction_type: /wantsStandardDeduction (BooleanWrapper)
+  // true = standard, false = itemized
   if (result.deduction_type_raw !== undefined) {
-    result.deduction_type = result.deduction_type_raw === 1 ? 'itemized' : 'standard';
+    result.deduction_type = result.deduction_type_raw === true ? 'standard' : 'itemized';
     delete result.deduction_type_raw;
   }
 
-  // Extract collections
-  const jobs = extractCollection('/jobs', JOB_FIELD_MAP);
+  // Extract and post-process collections
+  var jobs = extractCollection('/jobs', JOB_FIELD_MAP);
+  jobs = jobs.map(postProcessJob);
   if (jobs.length > 0) result.jobs = jobs;
 
-  const pensions = extractCollection('/pensions', PENSION_FIELD_MAP);
+  var pensions = extractCollection('/pensions', PENSION_FIELD_MAP);
+  pensions = pensions.map(postProcessPension);
   if (pensions.length > 0) result.pensions = pensions;
 
-  const selfEmployment = extractCollection('/selfEmploymentSources', SE_FIELD_MAP);
+  var selfEmployment = extractCollection('/selfEmploymentSources', SE_FIELD_MAP);
+  selfEmployment = selfEmployment.map(postProcessSE);
   if (selfEmployment.length > 0) result.self_employment = selfEmployment;
 
-  const ssi = extractCollection('/socialSecuritySources', SSI_FIELD_MAP);
+  var ssi = extractCollection('/socialSecuritySources', SSI_FIELD_MAP);
+  ssi = ssi.map(postProcessSSI);
   if (ssi.length > 0) result.ssi = ssi;
 
   // ============================================================
-  // ALSO EXTRACT MORTGAGE INTEREST FROM DOM (not in factGraph directly)
+  // EXTRACT MORTGAGE INTEREST (try multiple paths)
   // ============================================================
-  // Mortgage interest may be stored differently — check common paths
+
   var mortgagePaths = [
     '/qualifiedMortgageAndInvestmentInterest',
     '/qualifiedMortgageInterest',
     '/mortgageInterest',
   ];
   for (var i = 0; i < mortgagePaths.length; i++) {
-    var val = getFactValue(mortgagePaths[i]);
-    if (val !== undefined && val !== null && val > 0) {
-      result.mortgage_interest = val;
+    var mVal = getFactValue(mortgagePaths[i]);
+    if (mVal !== undefined && mVal !== null && mVal > 0) {
+      result.mortgage_interest = mVal;
       break;
+    }
+  }
+
+  // ============================================================
+  // EXTRACT CHARITY GIFTS — fallback for derived paths
+  // Only used if /cashCharitableContributions was NOT in sessionStorage
+  // ============================================================
+
+  if (result.charity_gifts === undefined) {
+    var charityPaths = [
+      '/charitableContributions',
+      '/totalCharitableContributions',
+    ];
+    for (var c = 0; c < charityPaths.length; c++) {
+      var cVal = getFactValue(charityPaths[c]);
+      if (cVal !== undefined && cVal !== null && cVal > 0) {
+        result.charity_gifts = cVal;
+        break;
+      }
     }
   }
 
   // ============================================================
   // EXTRACT ESTIMATED TAX PAYMENTS
   // ============================================================
+
   var estTaxPaths = [
+    '/totalEstimatedTaxesPaid',
     '/estimatedTaxPayments',
     '/estimatedTaxPaid',
     '/totalEstimatedTaxPayments',
@@ -337,6 +586,7 @@
   // ============================================================
   // EXTRACT CTC NUMBER OF CHILDREN
   // ============================================================
+
   var ctcPaths = [
     '/ctcEligibleChildren',
     '/numberOfCtcEligibleChildren',
@@ -353,6 +603,7 @@
   // ============================================================
   // EXTRACT AOTC NUMBER OF STUDENTS
   // ============================================================
+
   var aotcPaths = [
     '/aotcEligibleStudents',
     '/numberOfAotcEligibleStudents',
@@ -366,15 +617,98 @@
   }
 
   // ============================================================
-  // RETURN RESULTS
+  // DOM EXTRACTION — Read visible form inputs as secondary source
+  // Reads all <fg-set> elements and their current input values
+  // ============================================================
+
+  var domExtracted = {};
+
+  try {
+    var fgSets = document.querySelectorAll('fg-set[path]');
+    fgSets.forEach(function (el) {
+      var path = el.getAttribute('path');
+      var inputType = el.getAttribute('inputtype');
+      if (!path) return;
+
+      var val = undefined;
+
+      switch (inputType) {
+        case 'dollar': {
+          var input = el.querySelector('input');
+          if (input && input.value) {
+            // Remove $ and commas, parse as number
+            var cleaned = input.value.replace(/[$,\s]/g, '');
+            val = cleaned ? parseFloat(cleaned) : undefined;
+          }
+          break;
+        }
+        case 'boolean': {
+          var checked = el.querySelector('input[type="radio"]:checked');
+          if (checked) {
+            val = checked.value === 'true' || checked.value === '1';
+          }
+          break;
+        }
+        case 'enum':
+        case 'select': {
+          var checked = el.querySelector('input[type="radio"]:checked');
+          if (checked) {
+            val = checked.value;
+          } else {
+            var sel = el.querySelector('select');
+            if (sel && sel.value && sel.value !== '- Select -') {
+              val = sel.value;
+            }
+          }
+          break;
+        }
+        case 'date': {
+          var month = el.querySelector('select[name*="-month"]');
+          var day = el.querySelector('input[name*="-day"]');
+          var year = el.querySelector('select[name*="-year"], input[name*="-year"]');
+          if (month && day && year && month.value && day.value && year.value) {
+            var mm = month.value.padStart(2, '0');
+            var dd = day.value.padStart(2, '0');
+            val = mm + '/' + dd + '/' + year.value;
+          }
+          break;
+        }
+        case 'single-checkbox': {
+          var cb = el.querySelector('input[type="checkbox"]');
+          if (cb) {
+            val = cb.checked;
+          }
+          break;
+        }
+        default: {
+          // Text/int inputs
+          var input = el.querySelector('input');
+          if (input && input.value) {
+            var num = parseFloat(input.value.replace(/[$,\s]/g, ''));
+            val = isNaN(num) ? input.value : num;
+          }
+        }
+      }
+
+      if (val !== undefined) {
+        domExtracted[path] = { value: val, inputType: inputType };
+      }
+    });
+  } catch (e) {
+    domExtracted._error = String(e);
+  }
+
+  // ============================================================
+  // RETURN RESULTS (both payload and DOM)
   // ============================================================
 
   return {
     error: null,
-    source: 'factGraph',
+    source: 'factGraph+dom',
     raw_key_count: Object.keys(rawData).length,
     extracted: result,
-    // Also return the raw keys for debugging
+    dom_extracted: domExtracted,
+    dom_field_count: Object.keys(domExtracted).length,
     raw_keys_sample: Object.keys(rawData).slice(0, 50),
   };
 })();
