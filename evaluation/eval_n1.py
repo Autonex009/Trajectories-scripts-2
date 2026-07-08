@@ -99,7 +99,7 @@ class Config(BaseModel):
     )
     eval_save_dir: str = "results_n1"
     eval_max_attempts: int = 3
-    eval_max_steps: int = 75
+    eval_max_steps: int = 150
     eval_temperature: float = 0.3
     eval_top_p: float = 1.0
     # Payload management
