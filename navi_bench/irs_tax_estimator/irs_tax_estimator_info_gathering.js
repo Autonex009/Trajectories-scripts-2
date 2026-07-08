@@ -176,6 +176,7 @@
     '/isEligibleForQualifiedPassengerVehicleLoanInterestDeduction': 'car_loan_interest',
     '/wantsDerivedQBIDeduction': 'qbi_deduction',
     '/wantsQBIDeductionOverride': 'qbi_deduction',
+    '/qBIDeductionOverrideAmount': 'qbi_deduction',
     // Credits
     '/cdccQualifyingPersons': 'cdcc_number_of_children',
     '/flowIsEligibleForCDCC': 'cdcc_number_of_children',
@@ -185,6 +186,7 @@
     '/aotcQualifiedEducationExpenses': 'aotc_tuition_fees',
     '/llcQualifiedEducationExpenses': 'llc_total_tuition_fees',
     '/flowIsEligibleForEDC': 'elderly_disabled_credit',
+    '/elderlyAndDisabledTaxCreditAmount': 'elderly_disabled_credit',
     '/businessCreditsForEligible': 'business_credit',
     '/schedule3Line2': 'foreign_tax_credit',
     '/schedule3Line6b': 'mortgage_interest_credit',
@@ -289,9 +291,12 @@
     'filerAssignment':           'person_raw',
     'monthlyIncome':             'monthly_benefit',
     'withheldRateAsRationale':   'withholding_percent',
+    'withheldRate':              'withholding_percent',
     'isAllYear':                 'ssi_pay_period_raw',
     'writableStartDate':         'ss_start_date',
+    'startDate':                 'ss_start_date',
     'writableEndDate':           'ss_end_date',
+    'endDate':                   'ss_end_date',
   };
 
   // ============================================================
@@ -424,7 +429,11 @@
         job.pay_frequency = freq || String(raw);
       } else if (typeof raw === 'string') {
         // New EnumWrapper format: already a string like "monthly"
-        job.pay_frequency = raw;
+        if (raw === 'semimonthly') {
+          job.pay_frequency = 'twice_monthly';
+        } else {
+          job.pay_frequency = raw;
+        }
       } else {
         job.pay_frequency = String(raw);
       }
@@ -476,13 +485,20 @@
       delete pension.pension_duration_raw;
     }
 
-    // pension_payment_frequency: integer → string
+    // pension_payment_frequency: integer or string
     if (pension.pension_payment_frequency_raw !== undefined) {
-      var freq = PAY_FREQ_MAP[pension.pension_payment_frequency_raw];
-      if (freq) {
-        pension.pension_payment_frequency = freq;
+      var freqRaw = pension.pension_payment_frequency_raw;
+      if (typeof freqRaw === 'number') {
+        var freq = PAY_FREQ_MAP[freqRaw];
+        pension.pension_payment_frequency = freq || String(freqRaw);
+      } else if (typeof freqRaw === 'string') {
+        if (freqRaw === 'semimonthly') {
+          pension.pension_payment_frequency = 'twice_monthly';
+        } else {
+          pension.pension_payment_frequency = freqRaw;
+        }
       } else {
-        pension.pension_payment_frequency = String(pension.pension_payment_frequency_raw);
+        pension.pension_payment_frequency = String(freqRaw);
       }
       delete pension.pension_payment_frequency_raw;
     }
@@ -510,6 +526,14 @@
     if (ssi.ssi_pay_period_raw !== undefined) {
       ssi.ssi_pay_period = ssi.ssi_pay_period_raw === true ? 'all_year' : 'part_year';
       delete ssi.ssi_pay_period_raw;
+    }
+
+    // withholding_percent: "seven" -> "7"
+    if (ssi.withholding_percent !== undefined) {
+      var wMap = { 'seven': '7', 'ten': '10', 'twelve': '12', 'twentyTwo': '22' };
+      if (wMap[ssi.withholding_percent]) {
+        ssi.withholding_percent = wMap[ssi.withholding_percent];
+      }
     }
 
     return ssi;
@@ -734,6 +758,11 @@
     result.filing_status = result.filing_status.replace(/[A-Z]/g, function(letter) {
       return '_' + letter.toLowerCase();
     }).toLowerCase();
+
+    // Alias for QSS
+    if (result.filing_status === 'qualified_surviving_spouse') {
+      result.filing_status = 'qualifying_surviving_spouse';
+    }
   }
 
   // The IRS only asks "Do you plan to claim dependents?" once for MFJ.
