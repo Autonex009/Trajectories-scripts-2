@@ -218,9 +218,34 @@ EMPTY_VALUES = {0, 0.0, False, None, "", "0", "false", "null", "none", "0.0"}
 
 
 # =============================================================================
-# NORMALIZATION HELPERS
+# QUERY FORMAT HELPERS
 # =============================================================================
 
+
+def _unwrap_queries(queries: Any) -> list[dict] | None:
+    """Normalize query format — handles both single and double nesting.
+
+    Team CSV convention:  queries = [[{field: value, ...}]]  (double list)
+    Our CSV convention:   queries = [{field: value, ...}]    (single list)
+
+    This function ensures both formats produce [dict, ...] for the verifier.
+    """
+    if queries is None:
+        return None
+    if not isinstance(queries, list):
+        return queries
+    if len(queries) == 0:
+        return queries
+    # Double-nested: [[{...}]] → [{...}]
+    if isinstance(queries[0], list):
+        return queries[0]
+    # Already single-nested: [{...}]
+    return queries
+
+
+# =============================================================================
+# NORMALIZATION HELPERS
+# =============================================================================
 
 def _normalize_string(value: Any) -> str:
     """Normalize a string value for comparison.
@@ -462,8 +487,9 @@ class IrsTweQueryMatch(BaseMetric):
         Args:
             gt_queries: List of ground truth query dicts. Typically
                 contains a single dict with all form field values.
+                Also handles double-nested [[{...}]] format (team CSV convention).
         """
-        self.gt_queries = gt_queries
+        self.gt_queries = _unwrap_queries(gt_queries)
         self._agent_queries: list[dict] | None = None
         self._result: IrsTweVerifierResult | None = None
         self._tracked_pages: set = set()
@@ -543,30 +569,40 @@ class IrsTweQueryMatch(BaseMetric):
                 logger.debug(f"Ignoring non-IRS-TWE URL: {url[:60]}")
                 return
 
-            # Only extract on results page (all data is filled by then)
-            # But also extract on other pages as intermediate checkpoints
+            # Extract from both factGraph (payload) and DOM
             try:
                 # Wait briefly for sessionStorage to be populated
                 await page.wait_for_timeout(500)
 
-                # Inject JS to extract fact-graph from sessionStorage + window.factGraph
+                # Inject JS to extract fact-graph + DOM inputs
                 extraction = await page.evaluate(self.js_script)
 
                 if extraction and extraction.get("error") is None:
                     extracted = extraction.get("extracted", {})
+                    dom_extracted = extraction.get("dom_extracted", {})
+                    dom_count = extraction.get("dom_field_count", 0)
+
                     if extracted:
                         self._agent_queries = [extracted]
                         self._result = None  # Clear cached result
                         logger.info(
                             f"IrsTweQueryMatch: Extracted {len(extracted)} fields "
-                            f"from fact-graph ({extraction.get('raw_key_count', 0)} raw keys) "
+                            f"from payload ({extraction.get('raw_key_count', 0)} raw keys) "
+                            f"+ {dom_count} DOM fields "
                             f"on {url[:60]}"
                         )
                     else:
-                        logger.warning(f"IRS TWE: fact-graph extraction returned empty result on {url[:60]}")
+                        logger.warning(f"IRS TWE: payload extraction returned empty on {url[:60]}")
+
+                    # Log DOM extraction for cross-verification
+                    if dom_extracted and dom_count > 0:
+                        logger.debug(
+                            f"IRS TWE DOM cross-check: {dom_count} visible inputs "
+                            f"on {url[:60]}"
+                        )
                 else:
                     error = extraction.get("error", "unknown") if extraction else "null response"
-                    logger.warning(f"IRS TWE: fact-graph extraction error: {error}")
+                    logger.warning(f"IRS TWE: extraction error: {error}")
             except Exception as e:
                 logger.error(f"IRS TWE: JS extraction failed: {e}")
             return
@@ -580,9 +616,9 @@ class IrsTweQueryMatch(BaseMetric):
                     logger.error(f"Failed to parse agent queries as JSON: {queries[:200]}")
                     queries = None
 
-            self._agent_queries = queries
+            self._agent_queries = _unwrap_queries(queries)
             self._result = None  # Clear cached result
-            logger.info(f"IrsTweQueryMatch: Received agent queries ({len(queries) if queries else 0} entries)")
+            logger.info(f"IrsTweQueryMatch: Received agent queries ({len(self._agent_queries) if self._agent_queries else 0} entries)")
 
     async def compute(self) -> FinalResult:
         """Compute the final score (0.0 or 1.0)."""
@@ -752,7 +788,7 @@ def generate_task_config(
     eval_target = get_import_path(IrsTweQueryMatch)
     eval_config = {
         "_target_": eval_target,
-        "gt_queries": queries,
+        "gt_queries": _unwrap_queries(queries),
     }
 
     return BaseTaskConfig(
