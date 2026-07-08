@@ -147,6 +147,7 @@
     '/unemploymentIncomeWithholding': 'withhold_federal_tax',
     '/preTaxRetirementAccountIncome': 'pre_tax_total_distribution',
     // Adjustments
+    '/educatorExpenses': 'educator_expenses',
     '/educatorExpensesAdjustment': 'educator_expenses',
     '/alimonyPaid': 'alimony_paid',
     '/penaltyForEarlySavingsWithdrawal': 'early_withdrawal_penalty',
@@ -155,11 +156,13 @@
     '/hsaContributionAmount': 'hsa_deduction',
     '/deductionForTraditionalIRAContributionMax': 'traditional_ira',
     '/deductionForTraditionalIRAContribution': 'traditional_ira',
+    '/studentLoanInterestAmount': 'student_loan_interest',
     '/maxStudentLoanDeduction': 'student_loan_interest',
     // Deductions — /wantsStandardDeduction is a boolean (true=standard, false=itemized)
     '/wantsStandardDeduction': 'deduction_type_raw',
     '/stateAndLocalTaxPayments': 'salt',
     '/qualifiedMortgageInsurancePremiums': 'mortgage_insurance',
+    '/medicalAndDentalExpenses': 'medical_expenses',
     '/otherDeductionsTotal': 'medical_expenses',
     // Mortgage interest — verified real path from sessionStorage (July 2026)
     '/qualifiedMortgageInterestAndInvestmentInterestExpenses': 'mortgage_interest',
@@ -167,12 +170,17 @@
     '/homeInterest': 'mortgage_interest',
     // Additional deductions
     '/cashCharitableContributions': 'charity_gifts',
+    '/nonItemizerCharitableContributionDeductionAmount': 'cash_charitable_contributions',
     '/nonCashCharitableContributions': 'non_cash_charitable_contributions',
+    '/personalVehicleLoanInterestAmount': 'car_loan_interest',
     '/isEligibleForQualifiedPassengerVehicleLoanInterestDeduction': 'car_loan_interest',
+    '/wantsDerivedQBIDeduction': 'qbi_deduction',
     '/wantsQBIDeductionOverride': 'qbi_deduction',
     // Credits
+    '/cdccQualifyingPersons': 'cdcc_number_of_children',
     '/flowIsEligibleForCDCC': 'cdcc_number_of_children',
     '/cdccQualifyingExpenses': 'cdcc_annual_care_expenses',
+    '/estimatedTotalQualifiedAdoptionExpenses': 'adoption_credit_annual_expenses',
     '/adoptionEligibleChildren': 'adoption_credit_number_of_children',
     '/aotcQualifiedEducationExpenses': 'aotc_tuition_fees',
     '/llcQualifiedEducationExpenses': 'llc_total_tuition_fees',
@@ -354,8 +362,25 @@
       uuids[uuid][fieldName] = getValue(rawData[key]);
     });
 
-    Object.keys(uuids).forEach(function (uuid) {
+    // Use the collection order from the CollectionWrapper, not Object.keys order!
+    // e.g. /jobs has {$type: "CollectionWrapper", item: {items: ["uuid1", "uuid2"]}}
+    // This ensures "myself" job comes before "spouse" job, matching GT order.
+    var collectionEntry = rawData[prefix];
+    var orderedUuids;
+    if (collectionEntry && collectionEntry.$type === 'CollectionWrapper' &&
+        collectionEntry.item && collectionEntry.item.items) {
+      // Use the exact order from the collection, adding # prefix to match grouped keys
+      orderedUuids = collectionEntry.item.items.map(function (id) {
+        return '#' + id;
+      });
+    } else {
+      // Fallback: use whatever order Object.keys gives
+      orderedUuids = Object.keys(uuids);
+    }
+
+    orderedUuids.forEach(function (uuid) {
       var rawItem = uuids[uuid];
+      if (!rawItem) return; // UUID from collection but no fields found
       var mappedItem = {};
 
       Object.keys(fieldMap).forEach(function (factField) {
@@ -591,6 +616,7 @@
     '/ctcEligibleChildren',
     '/numberOfCtcEligibleChildren',
     '/numberOfQualifyingChildren',
+    '/ctcEligibleDependents',
   ];
   for (var k = 0; k < ctcPaths.length; k++) {
     var ctcVal = getFactValue(ctcPaths[k]);
@@ -607,6 +633,7 @@
   var aotcPaths = [
     '/aotcEligibleStudents',
     '/numberOfAotcEligibleStudents',
+    '/qualifyingStudents',
   ];
   for (var m = 0; m < aotcPaths.length; m++) {
     var aotcVal = getFactValue(aotcPaths[m]);
@@ -696,6 +723,23 @@
     });
   } catch (e) {
     domExtracted._error = String(e);
+  }
+
+  // ============================================================
+  // POST-PROCESS FILING STATUS & SPOUSE DEPENDENTS
+  // ============================================================
+
+  if (result.filing_status) {
+    // IRS Enum: marriedFilingJointly -> married_filing_jointly
+    result.filing_status = result.filing_status.replace(/[A-Z]/g, function(letter) {
+      return '_' + letter.toLowerCase();
+    }).toLowerCase();
+  }
+
+  // The IRS only asks "Do you plan to claim dependents?" once for MFJ.
+  // Our GT splits it into primary and spouse variables, so we duplicate the answer.
+  if (result.filing_status === 'married_filing_jointly' && result.plan_to_claim_dependents !== undefined) {
+    result.spouse_plan_to_claim_dependents = result.plan_to_claim_dependents;
   }
 
   // ============================================================
