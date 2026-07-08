@@ -428,12 +428,13 @@
         var freq = PAY_FREQ_MAP[raw];
         job.pay_frequency = freq || String(raw);
       } else if (typeof raw === 'string') {
-        // New EnumWrapper format: already a string like "monthly"
-        if (raw === 'semimonthly') {
-          job.pay_frequency = 'twice_monthly';
-        } else {
-          job.pay_frequency = raw;
+        var freq = raw.toLowerCase().trim();
+
+        if (freq === 'semimonthly') {
+          freq = 'twice_monthly';
         }
+
+        job.pay_frequency = freq;
       } else {
         job.pay_frequency = String(raw);
       }
@@ -492,12 +493,14 @@
         var freq = PAY_FREQ_MAP[freqRaw];
         pension.pension_payment_frequency = freq || String(freqRaw);
       } else if (typeof freqRaw === 'string') {
-        if (freqRaw === 'semimonthly') {
-          pension.pension_payment_frequency = 'twice_monthly';
-        } else {
-          pension.pension_payment_frequency = freqRaw;
-        }
-      } else {
+      var freq = freqRaw.toLowerCase().trim();
+
+      if (freq === 'semimonthly') {
+        freq = 'twice_monthly';
+      }
+
+      pension.pension_payment_frequency = freq;
+    } else {
         pension.pension_payment_frequency = String(freqRaw);
       }
       delete pension.pension_payment_frequency_raw;
