@@ -123,6 +123,7 @@
     '/primaryFilerIsBlind': 'is_blind',
     '/primaryFilerIsClaimedOnAnotherReturn': 'claimed_as_dependent',
     '/secondaryFilerIsClaimedOnAnotherReturn': 'spouse_claimed_as_dependent',
+    '/primaryFilerIsClaimingDependents': 'plan_to_claim_dependents',
     '/secondaryFilerAge65OrOlder': 'spouse_age_65_or_older',
     '/secondaryFilerIsBlind': 'spouse_is_blind',
     '/isMFSLivedTogether': 'living_together',
