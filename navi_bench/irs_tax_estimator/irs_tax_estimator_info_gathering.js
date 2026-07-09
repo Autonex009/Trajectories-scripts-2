@@ -122,6 +122,7 @@
     '/primaryFilerAge65OrOlder': 'user_age_65_or_older',
     '/primaryFilerIsBlind': 'is_blind',
     '/primaryFilerIsClaimedOnAnotherReturn': 'claimed_as_dependent',
+    '/secondaryFilerIsClaimedOnAnotherReturn': 'spouse_claimed_as_dependent',
     '/secondaryFilerAge65OrOlder': 'spouse_age_65_or_older',
     '/secondaryFilerIsBlind': 'spouse_is_blind',
     '/isMFSLivedTogether': 'living_together',
@@ -145,7 +146,7 @@
     '/nonSpecificOtherIncome': 'other_taxable_income',
     '/otherIncomeWithholding': 'other_taxable_withholding',
     '/unemploymentIncome': 'gross_unemployment_income',
-    '/unemploymentIncomeWithholding': 'withhold_federal_tax',
+    // REMOVED: /unemploymentIncomeWithholding — boolean field, not currency
     '/preTaxRetirementAccountIncome': 'pre_tax_total_distribution',
     // Adjustments
     '/educatorExpenses': 'educator_expenses',
@@ -167,6 +168,8 @@
     '/medicalAndDentalExpenses': 'medical_expenses',
     // REMOVED: /otherDeductionsTotal→medical_expenses (unrelated total, corrupts medical_expenses)
     '/casualtyLossesTotal': 'casualty_losses',
+    '/otherItemizedDeductions': 'other_itemized',
+    '/otherDeductions': 'other_itemized',
     // Mortgage interest — verified real path from sessionStorage (July 2026)
     '/qualifiedMortgageInterestAndInvestmentInterestExpenses': 'mortgage_interest',
     '/qualifiedMortgageInterest': 'mortgage_interest',
@@ -177,8 +180,6 @@
     '/nonCashCharitableContributions': 'non_cash_charitable_contributions',
     '/personalVehicleLoanInterestAmount': 'car_loan_interest',
     // REMOVED: /isEligibleForQualifiedPassengerVehicleLoanInterestDeduction (boolean→1.0, corrupts currency)
-    '/wantsDerivedQBIDeduction': 'qbi_deduction',
-    '/wantsQBIDeductionOverride': 'qbi_deduction',
     '/qBIDeductionOverrideAmount': 'qbi_deduction',
     // Credits
     '/cdccQualifyingPersons': 'cdcc_number_of_children',
@@ -282,6 +283,8 @@
     'otherPreTaxContributionsPerPayPeriod':       'pension_other_pay_period',
     'otherPreTaxContributionsToDate':             'pension_other_amount_so_far',
     'isAllYear':                                 'pension_duration_raw',
+    'writableStartDate':                         'pension_start_date',
+    'writableEndDate':                            'pension_end_date',
   };
 
   // ============================================================
@@ -461,6 +464,14 @@
       delete job.person_raw;
     }
 
+    // overtime_rate: "two" -> "2.0x", "onePointFive" -> "1.5x"
+    if (job.overtime_rate !== undefined) {
+      var oMap = { 'onePointFive': '1.5x', 'two': '2.0x' };
+      if (oMap[job.overtime_rate]) {
+        job.overtime_rate = oMap[job.overtime_rate];
+      }
+    }
+
     // Convert ISO dates (2026-05-31) to MM/DD/YYYY format
     if (job.recent_pay_period_end && typeof job.recent_pay_period_end === 'string') {
       job.recent_pay_period_end = isoToMmDdYyyy(job.recent_pay_period_end);
@@ -524,8 +535,20 @@
       delete pension.pension_payment_frequency_raw;
     }
 
+    // Convert ISO dates (2026-05-31) to MM/DD/YYYY format
+    if (pension.pension_payment_date && typeof pension.pension_payment_date === 'string') {
+      pension.pension_payment_date = isoToMmDdYyyy(pension.pension_payment_date);
+    }
+    if (pension.pension_start_date && typeof pension.pension_start_date === 'string') {
+      pension.pension_start_date = isoToMmDdYyyy(pension.pension_start_date);
+    }
+    if (pension.pension_end_date && typeof pension.pension_end_date === 'string') {
+      pension.pension_end_date = isoToMmDdYyyy(pension.pension_end_date);
+    }
+
     return pension;
   }
+
 
   function postProcessSE(se) {
     // person: filerAssignment → "myself" / "spouse"
@@ -555,6 +578,14 @@
       if (wMap[ssi.withholding_percent]) {
         ssi.withholding_percent = wMap[ssi.withholding_percent];
       }
+    }
+
+    // Convert ISO dates (2026-05-31) to MM/DD/YYYY format
+    if (ssi.ss_start_date && typeof ssi.ss_start_date === 'string') {
+      ssi.ss_start_date = isoToMmDdYyyy(ssi.ss_start_date);
+    }
+    if (ssi.ss_end_date && typeof ssi.ss_end_date === 'string') {
+      ssi.ss_end_date = isoToMmDdYyyy(ssi.ss_end_date);
     }
 
     return ssi;
@@ -796,6 +827,24 @@
       && result.plan_to_claim_dependents !== undefined
       && result.spouse_plan_to_claim_dependents === undefined) {
     result.spouse_plan_to_claim_dependents = result.plan_to_claim_dependents;
+  }
+
+  // C2 Fix: The Ground Truth (GT) completely omits the 'person' field
+  // for non-married filers. If we emit 'person' for them, it's scored as
+  // an EXTRA field and the task gets 0.0.
+  if (result.filing_status !== 'married_filing_jointly' && result.filing_status !== 'married_filing_separately') {
+    ['jobs', 'self_employment', 'ssi'].forEach(function (cat) {
+      if (result[cat]) {
+        result[cat].forEach(function (item) {
+          delete item.person;
+        });
+      }
+    });
+    if (result.pensions) {
+      result.pensions.forEach(function (item) {
+        delete item.pension_paid_to;
+      });
+    }
   }
 
   // ============================================================

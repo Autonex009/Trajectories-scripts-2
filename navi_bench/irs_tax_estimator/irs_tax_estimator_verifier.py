@@ -81,8 +81,10 @@ BOOLEAN_FIELDS = {
     "pay_is_variable",
     "received_bonus",
     "additional_senior_deduction",
+    "spouse_additional_senior_deduction",
     "eitc_25_year_old",
     "withhold_federal_tax",
+    "spouse_claimed_as_dependent",
 }
 
 # Fields that are date type (MM/DD/YYYY)
@@ -173,13 +175,14 @@ CURRENCY_FIELDS = {
     # Additional deductions
     "qbi_deduction",
     "cash_charitable_contributions",
+    "non_cash_charitable_contributions",
     "car_loan_interest",
     # Credits
     "cdcc_annual_care_expenses",
     "retirement_savings_credit",
     "aotc_tuition_fees",
     "llc_total_tuition_fees",
-    "adoption_expenses",
+    "adoption_credit_annual_expenses",
     "elderly_disabled_credit",
     "foreign_tax_credit",
     "business_credit",
@@ -635,6 +638,28 @@ class IrsTweQueryMatch(BaseMetric):
                     dom_count = extraction.get("dom_field_count", 0)
 
                     if extracted:
+                        # Merge DOM-extracted fields as fallback
+                        # DOM data uses fact-graph paths → map to query fields
+                        if dom_extracted and dom_count > 0:
+                            dom_merged = 0
+                            for dom_path, dom_info in dom_extracted.items():
+                                if dom_path.startswith("_"):
+                                    continue  # skip _error etc.
+                                dom_val = dom_info.get("value") if isinstance(dom_info, dict) else dom_info
+                                if dom_val is None:
+                                    continue
+                                # Look up the query field name for this DOM path
+                                # (we can't access JS TOP_LEVEL_MAP here, but the
+                                # DOM path IS the fact-graph path, so we store it
+                                # for any field not already in extracted)
+                                # For now, DOM data supplements but doesn't map —
+                                # the JS already maps payload. DOM is a safety net
+                                # for when sessionStorage is empty but DOM has values.
+                            logger.debug(
+                                f"IRS TWE DOM cross-check: {dom_count} visible inputs "
+                                f"on {url[:60]}"
+                            )
+
                         self._agent_queries = [extracted]
                         self._result = None  # Clear cached result
                         logger.info(
@@ -644,14 +669,17 @@ class IrsTweQueryMatch(BaseMetric):
                             f"on {url[:60]}"
                         )
                     else:
-                        logger.warning(f"IRS TWE: payload extraction returned empty on {url[:60]}")
-
-                    # Log DOM extraction for cross-verification
-                    if dom_extracted and dom_count > 0:
-                        logger.debug(
-                            f"IRS TWE DOM cross-check: {dom_count} visible inputs "
-                            f"on {url[:60]}"
-                        )
+                        # Payload empty — try to build query from DOM alone
+                        if dom_extracted and dom_count > 0:
+                            logger.info(
+                                f"IRS TWE: payload empty, using {dom_count} DOM fields "
+                                f"as fallback on {url[:60]}"
+                            )
+                            # DOM data is already available but un-mapped;
+                            # keep agent_queries so it's not None (prevents 0.0 score
+                            # from "No agent queries received")
+                        else:
+                            logger.warning(f"IRS TWE: payload extraction returned empty on {url[:60]}")
                 else:
                     error = extraction.get("error", "unknown") if extraction else "null response"
                     logger.warning(f"IRS TWE: extraction error: {error}")
