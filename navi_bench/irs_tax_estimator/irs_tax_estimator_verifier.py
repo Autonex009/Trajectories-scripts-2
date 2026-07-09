@@ -290,6 +290,29 @@ def _normalize_date(value: Any) -> str:
 
     return s
 
+def _normalize_overtime_rate(value: Any) -> str:
+    """Normalize overtime rate representations."""
+
+    if value is None:
+        return ""
+
+    s = _normalize_string(value)
+
+    mapping = {
+        "1.5x": "1.5x",
+        "1.5": "1.5x",
+        "onepointfive": "1.5x",
+        "one_point_five": "1.5x",
+        "one-point-five": "1.5x",
+
+        "2.0x": "2.0x",
+        "2x": "2.0x",
+        "2": "2.0x",
+        "2.0": "2.0x",
+        "two": "2.0x",
+    }
+
+    return mapping.get(s, s)
 
 def _normalize_number(value: Any) -> float | None:
     """Normalize a numeric value, stripping $ and commas."""
@@ -373,6 +396,15 @@ def _compare_field(field_name: str, gt_value: Any, agent_value: Any) -> tuple[bo
             return False, f"Integer mismatch: expected {gt_int}, got {agent_int}"
         except (ValueError, TypeError):
             return False, f"Integer parse error: expected {gt_value!r}, got {agent_value!r}"
+
+    if field_name == "overtime_rate":
+        gt_rate = _normalize_overtime_rate(gt_value)
+        agent_rate = _normalize_overtime_rate(agent_value)
+
+        if gt_rate == agent_rate:
+            return True, "OK"
+
+        return False, f"Enum mismatch: expected {gt_rate!r}, got {agent_rate!r}"
 
     # Enum / string fields
     if field_name in ENUM_FIELDS:
