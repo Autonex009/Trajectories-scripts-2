@@ -204,7 +204,7 @@
     '/tentativeSchedule3Line6g': 'amt_credit',
     '/alternativeMinimumTaxCreditAmount': 'amt_credit',
     // Senior deduction
-    '/couldEitherTaxpayerBeEligibleForSeniorDeduction': 'additional_senior_deduction',
+    '/primaryTaxpayerElectsForSeniorDeduction': 'additional_senior_deduction',
     '/secondaryTaxpayerElectsForSeniorDeduction': 'spouse_additional_senior_deduction',
   };
 
